@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f2eee7" />
+  <title>Household Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="loadingOverlay" class="loading-overlay" hidden aria-live="polite" aria-busy="true">
+    <div class="loading-card"><span class="loading-spinner" aria-hidden="true"></span><strong id="loadingMessage">Loading household…</strong></div>
+  </div>
+  <section id="profileGate" class="profile-gate" aria-label="Choose a household profile">
+    <div class="profile-panel">
+      <div class="profile-gate-heading">
+        <p class="section-kicker">Household Hub</p>
+        <h1>Who’s using the Hub?</h1>
+        <p id="profileGateMessage">Select a profile to continue</p>
+      </div>
+      <div id="profileChooser" class="profile-chooser"></div>
+      <div class="profile-gate-footer">
+        <button type="button" class="profile-manage-button" id="manageProfilesButton">Edit profiles</button>
+        <button type="button" class="profile-manage-button" id="continueDemoButton" hidden>Continue in demo mode</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="app" class="app-shell app-locked" aria-hidden="true">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow" id="todayLabel">Household Hub</p>
+        <h1 id="greeting">Good morning</h1>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-button" id="refreshButton" aria-label="Refresh">↻</button>
+        <button class="profile-button" id="profileButton" aria-label="Account">
+          <span id="profileInitials">HH</span>
+          <img id="profilePhoto" alt="Profile" hidden />
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section id="dashboardView" class="view active">
+        <div class="hero-grid">
+          <article class="card calendar-card">
+            <div class="card-header">
+              <div>
+                <p class="section-kicker">Household calendar</p>
+                <h2>Coming up</h2>
+              </div>
+              <button class="text-button" data-view-target="calendarView">View calendar</button>
+            </div>
+            <div id="upcomingEvents" class="upcoming-list"></div>
+            <button class="primary-button wide" id="quickAddEventButton">+ Add an event</button>
+          </article>
+
+          <article class="card tasks-card">
+            <div class="card-header stack-on-small">
+              <div>
+                <p class="section-kicker">Daily & weekly</p>
+                <h2>Tasks</h2>
+              </div>
+              <div class="segmented-control" id="taskRangeControl" aria-label="Task date range">
+                <button data-days="1" class="active">Today</button>
+                <button data-days="2">2 days</button>
+                <button data-days="3">3 days</button>
+                <button data-days="7">Week</button>
+              </div>
+            </div>
+            <div id="dashboardTasks" class="task-day-list"></div>
+            <button class="secondary-button wide" data-view-target="tasksView">Manage tasks</button>
+          </article>
+        </div>
+
+        <section class="quick-grid">
+          <button class="quick-card" data-view-target="listsView">
+            <span class="quick-icon">☑</span>
+            <span><strong>Lists</strong><small>Groceries, packing, supplies, and more</small></span>
+            <span class="quick-arrow">›</span>
+          </button>
+          <button class="quick-card" data-view-target="tasksView">
+            <span class="quick-icon">✓</span>
+            <span><strong>Task setup</strong><small>Create daily, weekly, or one-time tasks</small></span>
+            <span class="quick-arrow">›</span>
+          </button>
+          <button class="quick-card" data-view-target="calendarView">
+            <span class="quick-icon">□</span>
+            <span><strong>Calendar</strong><small>See the household schedule</small></span>
+            <span class="quick-arrow">›</span>
+          </button>
+        </section>
+      </section>
+
+      <section id="calendarView" class="view">
+        <div class="page-heading">
+          <div><p class="section-kicker">Shared schedule</p><h2>Calendar</h2></div>
+          <button class="primary-button" id="addEventButton">+ Add event</button>
+        </div>
+        <div class="calendar-toolbar card compact-card">
+          <button class="icon-button" id="prevMonth">‹</button>
+          <h3 id="calendarMonthLabel"></h3>
+          <button class="icon-button" id="nextMonth">›</button>
+        </div>
+        <div class="calendar-layout">
+          <div class="card calendar-month-card">
+            <div class="weekday-row"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+            <div id="calendarGrid" class="calendar-grid"></div>
+          </div>
+          <aside class="card day-events-card">
+            <p class="section-kicker">Selected day</p>
+            <h3 id="selectedDateLabel"></h3>
+            <div id="selectedDayEvents" class="upcoming-list"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="listsView" class="view">
+        <div class="page-heading">
+          <div><p class="section-kicker">Temporary or repeating</p><h2>Lists</h2></div>
+          <button class="primary-button" id="addListButton">+ New list</button>
+        </div>
+        <div id="listsGrid" class="lists-grid"></div>
+      </section>
+
+      <section id="tasksView" class="view">
+        <div class="page-heading">
+          <div><p class="section-kicker">Household routines</p><h2>Task setup</h2></div>
+          <button class="primary-button" id="addTaskButton">+ New task</button>
+        </div>
+        <div class="card compact-card filter-row">
+          <button class="filter-chip active" data-task-filter="all">All</button>
+          <button class="filter-chip" data-task-filter="daily">Daily</button>
+          <button class="filter-chip" data-task-filter="weekly">Weekly</button>
+          <button class="filter-chip" data-task-filter="monthly">Monthly</button>
+          <button class="filter-chip" data-task-filter="once">One-time</button>
+        </div>
+        <div id="taskManagerList" class="manager-list"></div>
+      </section>
+
+      <section id="settingsView" class="view">
+        <div class="page-heading"><div><p class="section-kicker">Household account</p><h2>Settings</h2></div></div>
+        <div class="settings-grid">
+          <article class="card settings-card">
+            <h3>Firebase & Google</h3>
+            <p class="muted">Add your Firebase configuration in <code>js/firebase-config.js</code>. Google authentication and Firestore will activate automatically.</p>
+            <div id="authStatus" class="status-box">Demo mode is active.</div>
+            <button class="primary-button wide" id="signInButton">Sign in with Google</button>
+            <button class="secondary-button wide" id="signOutButton" hidden>Sign out</button>
+          </article>
+          <article class="card settings-card">
+            <h3>Household</h3>
+            <label>Household name<input id="householdNameInput" value="Our Home" /></label>
+            <label>Home screen title<input id="homeTitleInput" value="Household Hub" /></label>
+            <button class="primary-button" id="saveSettingsButton">Save settings</button>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Main navigation">
+      <button class="active" data-view-target="dashboardView"><span>⌂</span>Home</button>
+      <button data-view-target="calendarView"><span>□</span>Calendar</button>
+      <button data-view-target="listsView"><span>☑</span>Lists</button>
+      <button data-view-target="tasksView"><span>✓</span>Tasks</button>
+      <button data-view-target="settingsView"><span>⚙</span>Settings</button>
+    </nav>
+  </div>
+
+  <dialog id="eventDialog" class="modal">
+    <form method="dialog" id="eventForm">
+      <div class="modal-header"><div><p class="section-kicker">Calendar</p><h3>Add an event</h3></div><button type="button" class="icon-button dialog-close" aria-label="Close">×</button></div>
+      <label>Event name<input name="title" required placeholder="Dinner, appointment, birthday..." /></label>
+      <div class="form-row"><label>Date<input name="date" type="date" required /></label><label>Time<input name="time" type="time" /></label></div>
+      <label>Notes<textarea name="notes" rows="3" placeholder="Optional details"></textarea></label>
+      <div class="modal-actions"><button type="button" class="secondary-button dialog-close">Cancel</button><button type="submit" class="primary-button">Save event</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="listDialog" class="modal">
+    <form method="dialog" id="listForm">
+      <div class="modal-header"><div><p class="section-kicker">Lists</p><h3>Create a list</h3></div><button type="button" class="icon-button dialog-close" aria-label="Close">×</button></div>
+      <label>List name<input name="name" required placeholder="Groceries, beach trip, monthly supplies..." /></label>
+      <label>List type<select name="type"><option value="temporary">Temporary</option><option value="repeating">Repeating</option></select></label>
+      <label class="checkbox-label"><input name="resetOnComplete" type="checkbox" /> Reset checked items when list repeats</label>
+      <div class="modal-actions"><button type="button" class="secondary-button dialog-close">Cancel</button><button type="submit" class="primary-button">Create list</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="taskDialog" class="modal">
+    <form method="dialog" id="taskForm">
+      <div class="modal-header"><div><p class="section-kicker">Tasks</p><h3>Create a task</h3></div><button type="button" class="icon-button dialog-close" aria-label="Close">×</button></div>
+      <label>Task name<input name="title" required placeholder="Take out trash, water plants..." /></label>
+      <label>Repeats<select name="frequency" id="taskFrequency"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="once">One time</option></select></label>
+      <section id="weeklySchedule" hidden>
+        <div class="field-heading"><strong>Days of the week</strong><span>Choose one or more days</span></div>
+        <div class="weekday-quick-options" id="weekdayQuickOptions">
+          <button type="button" class="secondary-button" data-day-preset="weekdays">M–F</button>
+          <button type="button" class="secondary-button" data-day-preset="weekend">Sat/Sun</button>
+          <button type="button" class="secondary-button" data-day-preset="everyday">Everyday</button>
+          <button type="button" class="text-button" data-day-preset="clear">Clear</button>
+        </div>
+        <div id="weeklyDays" class="weekday-picker">
+          <label><input type="checkbox" value="0" /><span>Sun</span></label><label><input type="checkbox" value="1" /><span>Mon</span></label><label><input type="checkbox" value="2" /><span>Tue</span></label><label><input type="checkbox" value="3" /><span>Wed</span></label><label><input type="checkbox" value="4" /><span>Thu</span></label><label><input type="checkbox" value="5" /><span>Fri</span></label><label><input type="checkbox" value="6" /><span>Sat</span></label>
+        </div>
+      </section>
+      <section id="monthlySchedule" hidden>
+        <label>Monthly pattern<select name="monthlyMode" id="monthlyMode"><option value="dayOfMonth">A numbered day each month</option><option value="ordinalWeekday">A particular weekday each month</option></select></label>
+        <label id="monthDayField">Day of the month<input name="monthDay" type="number" min="1" max="31" value="1" /></label>
+        <div id="ordinalWeekdayFields" class="form-row" hidden>
+          <label>Week<select name="monthOrdinal"><option value="1">First</option><option value="2">Second</option><option value="3">Third</option><option value="4">Fourth</option><option value="5">Fifth</option><option value="-1">Last</option></select></label>
+          <label>Day<select name="monthWeekday"><option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option></select></label>
+        </div>
+      </section>
+      <label id="taskDateField" hidden>Date<input name="date" type="date" /></label>
+      <label>Assigned to<select name="assigneeUid" id="taskAssignee"><option value="everyone">Everyone</option></select></label>
+      <div class="modal-actions"><button type="button" class="secondary-button dialog-close">Cancel</button><button type="submit" class="primary-button">Save task</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="listDetailDialog" class="modal wide-modal">
+    <form method="dialog" id="listItemForm">
+      <div class="modal-header"><div><p class="section-kicker">List</p><h3 id="listDetailTitle"></h3></div><button type="button" class="icon-button dialog-close" aria-label="Close">×</button></div>
+      <div class="inline-add"><input id="newListItemInput" placeholder="Add an item" /><button type="button" class="primary-button" id="addListItemButton">Add</button></div>
+      <div id="listDetailItems" class="detail-items"></div>
+      <div class="modal-actions"><button type="button" class="danger-button" id="deleteListButton">Delete list</button><div class="list-detail-actions"><button type="button" class="secondary-button" id="clearListChecksButton" hidden>Clear all checkmarks</button><button type="button" class="secondary-button dialog-close">Done</button></div></div>
+    </form>
+  </dialog>
+
+  <dialog id="nicknameDialog" class="modal nickname-modal">
+    <form id="nicknameForm">
+      <div class="modal-header"><div><p class="section-kicker">New profile</p><h3>Choose a nickname</h3></div><button type="button" class="icon-button nickname-cancel" aria-label="Close">×</button></div>
+      <p class="muted">This is the name that will appear on the household profile screen. Your Google account name will stay unchanged.</p>
+      <label>Nickname<input id="profileNicknameInput" name="nickname" required maxlength="24" autocomplete="off" placeholder="John, Mom, Dad..." /></label>
+      <div class="modal-actions"><button type="button" class="secondary-button nickname-cancel">Cancel</button><button type="submit" class="primary-button">Continue to Google</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
