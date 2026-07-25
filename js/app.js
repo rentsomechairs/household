@@ -8,6 +8,10 @@ let taskFilter='all';
 let activeListId=null;
 let activeUser=null;
 let profilesEditing=false;
+let pendingAuthProfile=null;
+let pendingNickname="";
+let phoneAuthUnsubscribe=null;
+let phoneAuthCode="";
 
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
 const iso=d=>{const local=new Date(d.getTime()-d.getTimezoneOffset()*60000);return local.toISOString().slice(0,10)};
@@ -31,8 +35,9 @@ function enterApp(){
 }
 function profileCard(profile,current=false){
   const displayName=profile.nickname||profile.name||profile.email||'Google user';
+  const authorized=dataService.isProfileAuthorized(profile.uid);
   const photo=profile.photoURL?`<img src="${escapeHtml(profile.photoURL)}" alt="">`:`<span>${initials(displayName)}</span>`;
-  return `<div class="profile-choice-wrap"><button type="button" class="profile-choice ${current?'current':''}" data-profile-uid="${escapeHtml(profile.uid)}" data-profile-email="${escapeHtml(profile.email||'')}"><span class="profile-avatar">${photo}</span><strong>${escapeHtml(displayName)}</strong><small>${current?'Signed in':'Household profile'}</small></button>${profilesEditing?`<button type="button" class="profile-remove" data-remove-profile="${escapeHtml(profile.uid)}" aria-label="Remove household profile">×</button>`:''}</div>`;
+  return `<div class="profile-choice-wrap"><button type="button" class="profile-choice ${current?'current':''} ${authorized?'authorized':''}" data-profile-uid="${escapeHtml(profile.uid)}" data-profile-email="${escapeHtml(profile.email||'')}"><span class="profile-avatar">${photo}</span><strong>${escapeHtml(displayName)}</strong><small>${authorized?'Ready on this device':'Tap to sign in'}</small></button>${profilesEditing?`<button type="button" class="profile-remove" data-remove-profile="${escapeHtml(profile.uid)}" aria-label="Remove household profile">×</button>`:''}</div>`;
 }
 function renderProfileChooser(){
   const chooser=$('#profileChooser');
@@ -49,13 +54,14 @@ async function loadSignedInHousehold(user){
   dataService.setHousehold();
   showLoading('Loading household…');
   try{state=await dataService.getAll();}finally{hideLoading();}
-  $('#profileInitials').textContent=initials(user.displayName||user.email||'HH');
+  const label=user.nickname||user.name||user.displayName||user.email||'Household profile';
+  $('#profileInitials').textContent=initials(label);
   $('#profileInitials').hidden=Boolean(user.photoURL);
   $('#profilePhoto').hidden=!user.photoURL;
   if(user.photoURL)$('#profilePhoto').src=user.photoURL;
   $('#signInButton').hidden=true;
   $('#signOutButton').hidden=false;
-  $('#authStatus').textContent=`Signed in as ${user.displayName||user.email} · Shared household: ${dataService.getHouseholdId()}`;
+  $('#authStatus').textContent=`Using ${label} · Shared household: ${dataService.getHouseholdId()}`;
   renderAll();
 }
 
@@ -210,13 +216,12 @@ function bindEvents(){
     const add=e.target.closest('#addGoogleProfile');
     const profileButton=e.target.closest('[data-profile-uid]');
     try{
-      if(add){$('#nicknameForm').reset();$('#nicknameDialog').showModal();setTimeout(()=>$('#profileNicknameInput').focus(),50);return;}
+      if(add){pendingAuthProfile=null;pendingNickname='';$('#nicknameForm').reset();$('#nicknameDialog').showModal();setTimeout(()=>$('#profileNicknameInput').focus(),50);return;}
       if(profileButton){
-        const current=dataService.getCurrentUser();
-        if(current?.uid===profileButton.dataset.profileUid){await loadSignedInHousehold(current);enterApp();return;}
-        const result=await dataService.switchProfile({email:profileButton.dataset.profileEmail});
-        if(result?.redirecting){showToast('Opening Google sign-in…');return;}
-        await loadSignedInHousehold(result.user);enterApp();
+        const profile=dataService.getKnownProfiles().find(p=>p.uid===profileButton.dataset.profileUid);
+        if(!profile)return;
+        if(dataService.isProfileAuthorized(profile.uid)){await loadSignedInHousehold(profile);enterApp();return;}
+        pendingAuthProfile=profile;pendingNickname='';$('#signInChoiceTitle').textContent=`Sign in as ${profile.nickname||profile.name||'this profile'}`;$('#signInChoiceDialog').showModal();
       }
     }catch(err){showToast(err.message||'Google sign-in failed');}
   });
@@ -225,17 +230,39 @@ function bindEvents(){
     const nickname=$('#profileNicknameInput').value.trim();
     if(!nickname)return;
     $('#nicknameDialog').close();
-    try{
-      const result=await dataService.signIn('',nickname);
-      if(result?.redirecting){showToast('Opening Google sign-in…');return;}
-      await dataService.renameProfile(result.user.uid,nickname);
-      await loadSignedInHousehold(result.user);
-      enterApp();
-    }catch(err){
-      if(err?.code!=='auth/popup-closed-by-user'&&err?.code!=='auth/cancelled-popup-request')showToast(err.message||'Google sign-in failed');
-    }
+    pendingNickname=nickname;pendingAuthProfile=null;
+    $('#signInChoiceTitle').textContent=`Add ${nickname}`;
+    $('#signInChoiceDialog').showModal();
   });
   $$('.nickname-cancel').forEach(button=>button.addEventListener('click',()=>$('#nicknameDialog').close()));
+  $('#signInOnDeviceButton').addEventListener('click',async()=>{
+    $('#signInChoiceDialog').close();
+    try{
+      const result=await dataService.signIn(pendingAuthProfile?.email||'',pendingNickname,pendingAuthProfile?.uid||'');
+      if(result?.redirecting){showToast('Opening Google sign-in…');return;}
+      await dataService.loadProfiles();
+      const uid=pendingAuthProfile?.uid||result.user.uid;dataService.authorizeProfileOnDevice(uid);
+      const profile=dataService.getKnownProfiles().find(p=>p.uid===uid)||{uid,nickname:pendingNickname,name:result.user.displayName,email:result.user.email,photoURL:result.user.photoURL};
+      await loadSignedInHousehold(profile);enterApp();
+    }catch(err){if(err?.code!=='auth/popup-closed-by-user')showToast(err.message||'Google sign-in failed');}
+  });
+  $('#signInWithPhoneButton').addEventListener('click',async()=>{
+    $('#signInChoiceDialog').close();
+    try{
+      const request=await withLoading('Creating phone sign-in…',()=>dataService.createPhoneAuthRequest({profileUid:pendingAuthProfile?.uid||'',nickname:pendingNickname}));
+      phoneAuthCode=request.code;$('#phoneSignInCode').textContent=request.code.match(/.{1,4}/g).join(' ');$('#phoneSignInStatus').textContent='Waiting for approval…';
+      const canvas=$('#phoneSignInQr');await window.QRCode.toCanvas(canvas,request.url,{width:240,margin:1});$('#phoneSignInDialog').showModal();
+      if(phoneAuthUnsubscribe)phoneAuthUnsubscribe();
+      phoneAuthUnsubscribe=dataService.watchPhoneAuthRequest(request.code,async data=>{
+        if(data?.status!=='approved')return;
+        phoneAuthUnsubscribe?.();phoneAuthUnsubscribe=null;dataService.authorizeProfileOnDevice(data.approvedUid);await dataService.loadProfiles();
+        const profile=dataService.getKnownProfiles().find(p=>p.uid===data.approvedUid);$('#phoneSignInStatus').textContent='Approved!';setTimeout(async()=>{$('#phoneSignInDialog').close();await dataService.deletePhoneAuthRequest(request.code);if(profile){await loadSignedInHousehold(profile);enterApp();}},450);
+      });
+    }catch(err){showToast(err.message||'Could not start phone sign-in');}
+  });
+  $$('.phone-signin-cancel').forEach(button=>button.addEventListener('click',async()=>{phoneAuthUnsubscribe?.();phoneAuthUnsubscribe=null;$('#phoneSignInDialog').close();if(phoneAuthCode)await dataService.deletePhoneAuthRequest(phoneAuthCode);phoneAuthCode='';}));
+  $('#approveWithGoogleButton').addEventListener('click',async()=>{const code=new URLSearchParams(location.search).get('approve');if(!code)return;try{const result=await dataService.signInForApproval(code);if(result?.redirecting)return;$('#approveWithGoogleButton').hidden=true;$('#finishPhoneApprovalButton').hidden=false;$('#phoneApprovalMessage').textContent='Google sign-in complete. Approve the waiting device.';}catch(err){showToast(err.message||'Google sign-in failed');}});
+  $('#finishPhoneApprovalButton').addEventListener('click',async()=>{const code=new URLSearchParams(location.search).get('approve');try{await withLoading('Approving device…',()=>dataService.approvePhoneAuthRequest(code));$('#phoneApprovalMessage').textContent='Approved. You can return to the other device.';$('#finishPhoneApprovalButton').hidden=true;}catch(err){showToast(err.message||'Approval failed');}});
   $('#manageProfilesButton').addEventListener('click',()=>{profilesEditing=!profilesEditing;renderProfileChooser();});
   $('#continueDemoButton').addEventListener('click',async()=>{state=await dataService.getAll();activeUser={displayName:'Demo Home',email:'',photoURL:''};$('#profileInitials').textContent='DH';$('#profileInitials').hidden=false;$('#profilePhoto').hidden=true;renderAll();enterApp();});
 }
@@ -259,23 +286,17 @@ async function init(){
   await dataService.init();
   bindEvents();
   if(!dataService.isFirebaseEnabled()){
-    state=await dataService.getAll();
-    renderAll();
-    showProfileGate('Firebase is not configured yet. Continue in demo mode or configure Google sign-in.');
+    state=await dataService.getAll();renderAll();showProfileGate('Firebase is not configured yet. Continue in demo mode or configure Google sign-in.');return;
+  }
+  await dataService.loadProfiles();renderProfileChooser();renderAll();
+  const approvalCode=new URLSearchParams(location.search).get('approve');
+  if(approvalCode){
+    showProfileGate('Approve the sign-in request from your phone');$('#phoneApprovalDialog').showModal();
+    if(dataService.isGoogleSignedIn()){$('#approveWithGoogleButton').hidden=true;$('#finishPhoneApprovalButton').hidden=false;$('#phoneApprovalMessage').textContent='Google sign-in complete. Approve the waiting device.';}
     return;
   }
-  dataService.onAuthChanged(async user=>{
-    activeUser=user;
-    renderProfileChooser();
-    if(user){
-      try{await loadSignedInHousehold(user);showProfileGate('Select a profile to continue');}
-      catch(err){console.error(err);showProfileGate('Signed in, but household data could not be loaded. Check Firestore rules.');}
-    }else{
-      $('#signOutButton').hidden=true;
-      $('#signInButton').hidden=false;
-      showProfileGate('Select a profile or add a Google account');
-    }
-  });
-  renderAll();
+  dataService.onAuthChanged(async()=>{try{await dataService.loadProfiles();renderProfileChooser();}catch(err){console.error(err);}});
+  showProfileGate('Select a profile to continue');
 }
+
 init();

@@ -71,3 +71,14 @@ The included starter rules require Google authentication, but any authenticated 
 ## Echo Show / Silk Google sign-in
 
 The app detects Amazon Silk and uses Firebase `signInWithRedirect()` rather than a popup. Desktop browsers continue to use popup sign-in, with an automatic redirect fallback if a popup is blocked. After Google returns to the app, Firebase restores the authentication session and the pending profile nickname is saved to Firestore.
+
+## Phone / QR sign-in requirement
+
+In Firebase Console, open **Authentication → Sign-in method** and enable both:
+
+- Google
+- Anonymous
+
+Anonymous Authentication is used only to let a new device load the household profile list and wait for a phone approval. Household profiles and app data remain stored in Firestore.
+
+Publish the included `firestore.rules` after uploading this version because it adds the `authRequests` subcollection used by QR sign-in.

@@ -25,6 +25,9 @@ service cloud.firestore {
       match /completions/{completionId} {
         allow read, create, update, delete: if signedIn();
       }
+      match /authRequests/{requestId} {
+        allow read, create, update, delete: if signedIn();
+      }
     }
 
     match /{document=**} {
