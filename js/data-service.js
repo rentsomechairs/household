@@ -4,7 +4,21 @@ import { demoData } from './demo-data.js';
 let firebase=null;
 let householdId=FIREBASE_SETTINGS.householdId||'primary-home';
 let memberCache=[];
+const PENDING_NICKNAME_KEY='householdHubPendingNickname';
 const clone=value=>JSON.parse(JSON.stringify(value));
+
+function shouldUseRedirect(){
+  const ua=navigator.userAgent||'';
+  return /Silk\/|Kindle|KF[A-Z]{2,}|Echo/i.test(ua);
+}
+function rememberPendingNickname(nickname=''){
+  if(nickname.trim())sessionStorage.setItem(PENDING_NICKNAME_KEY,nickname.trim());
+}
+function takePendingNickname(){
+  const nickname=sessionStorage.getItem(PENDING_NICKNAME_KEY)||'';
+  sessionStorage.removeItem(PENDING_NICKNAME_KEY);
+  return nickname;
+}
 
 async function initFirebase(){
   if(!FIREBASE_SETTINGS.enabled)return false;
@@ -15,6 +29,15 @@ async function initFirebase(){
   const auth=authMod.getAuth(app);
   await authMod.setPersistence(auth,authMod.browserLocalPersistence);
   firebase={app,auth,db:fsMod.getFirestore(app),authMod,fsMod};
+
+  // Complete a Google redirect before the UI subscribes to auth changes.
+  // sessionStorage is used only to carry the unsaved nickname across OAuth;
+  // the finished member profile is written to Firestore immediately afterward.
+  const redirectResult=await authMod.getRedirectResult(auth);
+  if(redirectResult?.user){
+    await ensureHousehold();
+    await upsertCurrentMember(takePendingNickname());
+  }
   return true;
 }
 
@@ -90,10 +113,27 @@ export const dataService={
     if(!firebase)throw new Error('Firebase is not configured.');
     const provider=new firebase.authMod.GoogleAuthProvider();
     provider.setCustomParameters(loginHint?{prompt:'select_account',login_hint:loginHint}:{prompt:'select_account'});
-    const result=await firebase.authMod.signInWithPopup(firebase.auth,provider);
-    await ensureHousehold();
-    await upsertCurrentMember(nickname);
-    return result;
+
+    if(shouldUseRedirect()){
+      rememberPendingNickname(nickname);
+      await firebase.authMod.signInWithRedirect(firebase.auth,provider);
+      return {redirecting:true,user:null};
+    }
+
+    try{
+      const result=await firebase.authMod.signInWithPopup(firebase.auth,provider);
+      await ensureHousehold();
+      await upsertCurrentMember(nickname);
+      return result;
+    }catch(error){
+      // Fall back to redirect when the browser blocks or cannot support popups.
+      if(['auth/popup-blocked','auth/operation-not-supported-in-this-environment','auth/web-storage-unsupported'].includes(error?.code)){
+        rememberPendingNickname(nickname);
+        await firebase.authMod.signInWithRedirect(firebase.auth,provider);
+        return {redirecting:true,user:null};
+      }
+      throw error;
+    }
   },
   async switchProfile(profile){return this.signIn(profile?.email||'',profile?.nickname||profile?.name||'');},
   async signOut(){if(firebase)await firebase.authMod.signOut(firebase.auth);memberCache=[];},

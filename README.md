@@ -67,3 +67,7 @@ A blocking loading indicator appears for initial Firebase loading, manual refres
 ## Security note
 
 The included starter rules require Google authentication, but any authenticated Google account that can reach the app can currently access `primary-home`. Before sharing the URL publicly, restrict access to your household members' Firebase UIDs or implement invitation-based membership rules.
+
+## Echo Show / Silk Google sign-in
+
+The app detects Amazon Silk and uses Firebase `signInWithRedirect()` rather than a popup. Desktop browsers continue to use popup sign-in, with an automatic redirect fallback if a popup is blocked. After Google returns to the app, Firebase restores the authentication session and the pending profile nickname is saved to Firestore.

@@ -214,7 +214,9 @@ function bindEvents(){
       if(profileButton){
         const current=dataService.getCurrentUser();
         if(current?.uid===profileButton.dataset.profileUid){await loadSignedInHousehold(current);enterApp();return;}
-        const result=await dataService.switchProfile({email:profileButton.dataset.profileEmail});await loadSignedInHousehold(result.user);enterApp();
+        const result=await dataService.switchProfile({email:profileButton.dataset.profileEmail});
+        if(result?.redirecting){showToast('Opening Google sign-in…');return;}
+        await loadSignedInHousehold(result.user);enterApp();
       }
     }catch(err){showToast(err.message||'Google sign-in failed');}
   });
@@ -225,6 +227,7 @@ function bindEvents(){
     $('#nicknameDialog').close();
     try{
       const result=await dataService.signIn('',nickname);
+      if(result?.redirecting){showToast('Opening Google sign-in…');return;}
       await dataService.renameProfile(result.user.uid,nickname);
       await loadSignedInHousehold(result.user);
       enterApp();
