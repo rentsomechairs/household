@@ -22,3 +22,22 @@
 .auth-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:22px}.auth-choice-button{border:1px solid var(--line);background:#fff;border-radius:18px;padding:22px 16px;font:inherit;text-align:center;cursor:pointer}.auth-choice-button>span{display:grid;place-items:center;width:58px;height:58px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-size:30px;font-weight:700;margin:0 auto 12px}.auth-choice-button strong,.auth-choice-button small{display:block}.auth-choice-button small{color:var(--muted);margin-top:5px}.qr-wrap{display:grid;place-items:center;background:#fff;border-radius:18px;padding:16px;margin:20px auto 12px;width:max-content}.device-code{text-align:center;font-size:28px;letter-spacing:.18em;font-weight:800}.phone-signin-status{text-align:center;color:var(--muted);font-weight:600}.profile-choice.authorized .profile-avatar:after{content:'✓';position:absolute;right:8px;bottom:8px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#4b8b70;color:#fff;border:3px solid #171b28;font-size:18px}.profile-avatar{position:relative}@media(max-width:650px){.auth-choice-grid{grid-template-columns:1fr}}
 
 .phone-signin-link{display:block;max-width:100%;margin:10px auto 4px;text-align:center;word-break:break-all;font-weight:700;color:inherit;text-decoration:underline}.phone-signin-link[hidden]{display:none}.phone-signin-status{min-height:2.8em;text-align:center}
+
+/* Echo/Silk fallback for browsers with incomplete <dialog> support. */
+dialog.dialog-fallback-open {
+  display: block !important;
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10002;
+  max-height: 90vh;
+  overflow: auto;
+}
+body.modal-open::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 25, 32, .62);
+  z-index: 10001;
+}
+.qr-wrap canvas { image-rendering: pixelated; background: #fff; }

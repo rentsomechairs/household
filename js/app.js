@@ -19,6 +19,18 @@ const parseDate=s=>new Date(`${s}T12:00:00`);
 const uid=p=>`${p}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
 const escapeHtml=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 
+function openDialog(dialog){
+  if(!dialog)return;
+  try{if(typeof dialog.showModal==='function'){if(!dialog.open)dialog.showModal();return;}}catch(error){console.warn('Native dialog failed; using fallback',error);}
+  dialog.setAttribute('open','');dialog.classList.add('dialog-fallback-open');document.body.classList.add('modal-open');
+}
+function closeDialog(dialog){
+  if(!dialog)return;
+  try{if(typeof dialog.close==='function'&&dialog.open)dialog.close();}catch{}
+  dialog.removeAttribute('open');dialog.classList.remove('dialog-fallback-open');
+  if(!document.querySelector('dialog[open]'))document.body.classList.remove('modal-open');
+}
+
 
 function initials(name='Household'){return name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()||'HH';}
 function showProfileGate(message='Select a profile to continue'){
@@ -256,17 +268,17 @@ function bindEvents(){
     link.hidden=true;
     const context=canvas.getContext('2d');
     context.clearRect(0,0,canvas.width,canvas.height);
-    if(!dialog.open)dialog.showModal();
+    openDialog(dialog);
     try{
       const request=await dataService.createPhoneAuthRequest({profileUid:pendingAuthProfile?.uid||'',nickname:pendingNickname});
       phoneAuthCode=request.code;
       $('#phoneSignInCode').textContent=request.code.match(/.{1,4}/g).join(' ');
       link.href=request.url;link.textContent='Open approval page on this device';link.hidden=false;
-      if(window.QRCode?.toCanvas){
-        await window.QRCode.toCanvas(canvas,request.url,{width:240,margin:1,errorCorrectionLevel:'M'});
+      if(window.HouseholdQR?.toCanvas){
+        await window.HouseholdQR.toCanvas(canvas,request.url,{width:240,margin:4});
         $('#phoneSignInStatus').textContent='Scan the QR code with your phone. Waiting for approval…';
       }else{
-        $('#phoneSignInStatus').textContent='QR could not load. Type the address shown below into your phone.';
+        $('#phoneSignInStatus').textContent='QR generator unavailable. Use the approval address below on your phone.';
       }
       if(phoneAuthUnsubscribe)phoneAuthUnsubscribe();
       phoneAuthUnsubscribe=dataService.watchPhoneAuthRequest(request.code,async data=>{
@@ -277,7 +289,7 @@ function bindEvents(){
         const profile=dataService.getKnownProfiles().find(p=>p.uid===data.approvedUid);
         $('#phoneSignInStatus').textContent='Approved! Opening the household…';
         setTimeout(async()=>{
-          if(dialog.open)dialog.close();
+          closeDialog(dialog);
           await dataService.deletePhoneAuthRequest(request.code);
           phoneAuthCode='';
           if(profile){await loadSignedInHousehold(profile);enterApp();}
@@ -294,7 +306,7 @@ function bindEvents(){
       showToast(err.message||'Could not start phone sign-in');
     }
   });
-  $$('.phone-signin-cancel').forEach(button=>button.addEventListener('click',async()=>{phoneAuthUnsubscribe?.();phoneAuthUnsubscribe=null;$('#phoneSignInDialog').close();if(phoneAuthCode)await dataService.deletePhoneAuthRequest(phoneAuthCode);phoneAuthCode='';}));
+  $$('.phone-signin-cancel').forEach(button=>button.addEventListener('click',async()=>{phoneAuthUnsubscribe?.();phoneAuthUnsubscribe=null;closeDialog($('#phoneSignInDialog'));if(phoneAuthCode)await dataService.deletePhoneAuthRequest(phoneAuthCode);phoneAuthCode='';}));
   $('#approveWithGoogleButton').addEventListener('click',async()=>{const code=new URLSearchParams(location.search).get('approve');if(!code)return;try{const result=await dataService.signInForApproval(code);if(result?.redirecting)return;$('#approveWithGoogleButton').hidden=true;$('#finishPhoneApprovalButton').hidden=false;$('#phoneApprovalMessage').textContent='Google sign-in complete. Approve the waiting device.';}catch(err){showToast(err.message||'Google sign-in failed');}});
   $('#finishPhoneApprovalButton').addEventListener('click',async()=>{const code=new URLSearchParams(location.search).get('approve');try{await withLoading('Approving device…',()=>dataService.approvePhoneAuthRequest(code));$('#phoneApprovalMessage').textContent='Approved. You can return to the other device.';$('#finishPhoneApprovalButton').hidden=true;}catch(err){showToast(err.message||'Approval failed');}});
   $('#manageProfilesButton').addEventListener('click',()=>{profilesEditing=!profilesEditing;renderProfileChooser();});
