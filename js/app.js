@@ -248,17 +248,51 @@ function bindEvents(){
   });
   $('#signInWithPhoneButton').addEventListener('click',async()=>{
     $('#signInChoiceDialog').close();
+    const dialog=$('#phoneSignInDialog');
+    const canvas=$('#phoneSignInQr');
+    const link=$('#phoneSignInLink');
+    $('#phoneSignInCode').textContent='';
+    $('#phoneSignInStatus').textContent='Preparing secure sign-in…';
+    link.hidden=true;
+    const context=canvas.getContext('2d');
+    context.clearRect(0,0,canvas.width,canvas.height);
+    if(!dialog.open)dialog.showModal();
     try{
-      const request=await withLoading('Creating phone sign-in…',()=>dataService.createPhoneAuthRequest({profileUid:pendingAuthProfile?.uid||'',nickname:pendingNickname}));
-      phoneAuthCode=request.code;$('#phoneSignInCode').textContent=request.code.match(/.{1,4}/g).join(' ');$('#phoneSignInStatus').textContent='Waiting for approval…';
-      const canvas=$('#phoneSignInQr');await window.QRCode.toCanvas(canvas,request.url,{width:240,margin:1});$('#phoneSignInDialog').showModal();
+      const request=await dataService.createPhoneAuthRequest({profileUid:pendingAuthProfile?.uid||'',nickname:pendingNickname});
+      phoneAuthCode=request.code;
+      $('#phoneSignInCode').textContent=request.code.match(/.{1,4}/g).join(' ');
+      link.href=request.url;link.textContent='Open approval page on this device';link.hidden=false;
+      if(window.QRCode?.toCanvas){
+        await window.QRCode.toCanvas(canvas,request.url,{width:240,margin:1,errorCorrectionLevel:'M'});
+        $('#phoneSignInStatus').textContent='Scan the QR code with your phone. Waiting for approval…';
+      }else{
+        $('#phoneSignInStatus').textContent='QR could not load. Type the address shown below into your phone.';
+      }
       if(phoneAuthUnsubscribe)phoneAuthUnsubscribe();
       phoneAuthUnsubscribe=dataService.watchPhoneAuthRequest(request.code,async data=>{
         if(data?.status!=='approved')return;
-        phoneAuthUnsubscribe?.();phoneAuthUnsubscribe=null;dataService.authorizeProfileOnDevice(data.approvedUid);await dataService.loadProfiles();
-        const profile=dataService.getKnownProfiles().find(p=>p.uid===data.approvedUid);$('#phoneSignInStatus').textContent='Approved!';setTimeout(async()=>{$('#phoneSignInDialog').close();await dataService.deletePhoneAuthRequest(request.code);if(profile){await loadSignedInHousehold(profile);enterApp();}},450);
+        phoneAuthUnsubscribe?.();phoneAuthUnsubscribe=null;
+        dataService.authorizeProfileOnDevice(data.approvedUid);
+        await dataService.loadProfiles();
+        const profile=dataService.getKnownProfiles().find(p=>p.uid===data.approvedUid);
+        $('#phoneSignInStatus').textContent='Approved! Opening the household…';
+        setTimeout(async()=>{
+          if(dialog.open)dialog.close();
+          await dataService.deletePhoneAuthRequest(request.code);
+          phoneAuthCode='';
+          if(profile){await loadSignedInHousehold(profile);enterApp();}
+        },450);
+      },error=>{
+        console.error(error);
+        $('#phoneSignInStatus').textContent=`Firebase listener failed: ${error.message||'Unknown error'}`;
       });
-    }catch(err){showToast(err.message||'Could not start phone sign-in');}
+    }catch(err){
+      console.error(err);
+      $('#phoneSignInStatus').textContent=err?.code==='auth/operation-not-allowed'
+        ?'Anonymous sign-in is not enabled in Firebase Authentication.'
+        :(err.message||'Could not start phone sign-in.');
+      showToast(err.message||'Could not start phone sign-in');
+    }
   });
   $$('.phone-signin-cancel').forEach(button=>button.addEventListener('click',async()=>{phoneAuthUnsubscribe?.();phoneAuthUnsubscribe=null;$('#phoneSignInDialog').close();if(phoneAuthCode)await dataService.deletePhoneAuthRequest(phoneAuthCode);phoneAuthCode='';}));
   $('#approveWithGoogleButton').addEventListener('click',async()=>{const code=new URLSearchParams(location.search).get('approve');if(!code)return;try{const result=await dataService.signInForApproval(code);if(result?.redirecting)return;$('#approveWithGoogleButton').hidden=true;$('#finishPhoneApprovalButton').hidden=false;$('#phoneApprovalMessage').textContent='Google sign-in complete. Approve the waiting device.';}catch(err){showToast(err.message||'Google sign-in failed');}});

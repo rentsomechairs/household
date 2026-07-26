@@ -80,9 +80,9 @@ export const dataService={
     await ensureAnonymousSession();const code=Math.random().toString(36).slice(2,6).toUpperCase()+Math.random().toString(36).slice(2,6).toUpperCase();
     const ref=firebase.fsMod.doc(collectionRef('authRequests'),code);
     await firebase.fsMod.setDoc(ref,{code,profileUid,nickname,status:'pending',createdAt:firebase.fsMod.serverTimestamp(),expiresAt:Date.now()+10*60*1000,requestingUid:firebase.auth.currentUser.uid});
-    return {code,url:`${location.origin}${location.pathname}?approve=${encodeURIComponent(code)}`};
+    const approvalUrl=new URL(location.href);approvalUrl.search='';approvalUrl.hash='';approvalUrl.searchParams.set('approve',code);return {code,url:approvalUrl.toString()};
   },
-  watchPhoneAuthRequest(code,callback){const ref=firebase.fsMod.doc(collectionRef('authRequests'),code);return firebase.fsMod.onSnapshot(ref,s=>callback(s.exists()?s.data():null));},
+  watchPhoneAuthRequest(code,callback,onError){const ref=firebase.fsMod.doc(collectionRef('authRequests'),code);return firebase.fsMod.onSnapshot(ref,s=>callback(s.exists()?s.data():null),onError);},
   async approvePhoneAuthRequest(code){
     if(!isGoogleUser())throw new Error('Sign in with Google on this phone first.');
     const ref=firebase.fsMod.doc(collectionRef('authRequests'),code);const snap=await firebase.fsMod.getDoc(ref);if(!snap.exists())throw new Error('This sign-in request no longer exists.');

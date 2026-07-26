@@ -260,7 +260,8 @@
       <p class="muted">Open your phone camera and scan this code. This screen will continue automatically after approval.</p>
       <div class="qr-wrap"><canvas id="phoneSignInQr" width="240" height="240"></canvas></div>
       <div class="device-code" id="phoneSignInCode"></div>
-      <p class="phone-signin-status" id="phoneSignInStatus">Waiting for approval…</p>
+      <a id="phoneSignInLink" class="phone-signin-link" href="#" target="_blank" rel="noopener" hidden>Open approval page</a>
+      <p class="phone-signin-status" id="phoneSignInStatus">Preparing secure sign-in…</p>
       <div class="modal-actions"><button type="button" class="secondary-button phone-signin-cancel">Cancel</button></div>
     </form>
   </dialog>
