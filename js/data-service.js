@@ -25,14 +25,16 @@ async function initFirebase(){
   await authMod.setPersistence(auth,authMod.browserLocalPersistence);
   firebase={app,auth,db:fsMod.getFirestore(app),authMod,fsMod};
 
+  if(typeof auth.authStateReady==='function')await auth.authStateReady();
   const redirectResult=await authMod.getRedirectResult(auth);
   if(redirectResult?.user){
     const pending=takePendingAction();
     await ensureHousehold();
     if(pending.profileUid&&redirectResult.user.uid!==pending.profileUid){await authMod.signOut(auth);throw new Error('That Google account does not match the selected profile.');}
-    if(pending.nickname)await upsertCurrentMember(pending.nickname);
+    await upsertCurrentMember(pending.nickname||'');
     if(pending.profileUid)authorizeProfileOnDevice(pending.profileUid);
   }
+  if(isGoogleUser(auth.currentUser)){await ensureHousehold();await upsertCurrentMember('');}
   return true;
 }
 function householdRef(){return firebase.fsMod.doc(firebase.db,'households',householdId);}
@@ -52,7 +54,7 @@ async function beginGoogle(action={}){
     savePendingAction(action);await firebase.authMod.signInWithRedirect(firebase.auth,provider);return {redirecting:true};
   }
   try{
-    const result=await firebase.authMod.signInWithPopup(firebase.auth,provider);await ensureHousehold();if(action.profileUid&&result.user.uid!==action.profileUid){await firebase.authMod.signOut(firebase.auth);throw new Error('That Google account does not match the selected profile.');}if(action.nickname)await upsertCurrentMember(action.nickname);if(action.profileUid)authorizeProfileOnDevice(action.profileUid);return result;
+    const result=await firebase.authMod.signInWithPopup(firebase.auth,provider);await ensureHousehold();if(action.profileUid&&result.user.uid!==action.profileUid){await firebase.authMod.signOut(firebase.auth);throw new Error('That Google account does not match the selected profile.');}await upsertCurrentMember(action.nickname||'');if(action.profileUid)authorizeProfileOnDevice(action.profileUid);return result;
   }catch(error){
     if(['auth/popup-blocked','auth/operation-not-supported-in-this-environment','auth/web-storage-unsupported'].includes(error?.code)){savePendingAction(action);await firebase.authMod.signInWithRedirect(firebase.auth,provider);return {redirecting:true};}
     throw error;
@@ -71,6 +73,7 @@ export const dataService={
   authorizeProfileOnDevice,
   removeDeviceAuthorization(uid){const map=authorizedMap();delete map[uid];saveAuthorizedMap(map);},
   async forgetProfile(uid){requireAuth();await firebase.fsMod.deleteDoc(firebase.fsMod.doc(collectionRef('members'),uid));this.removeDeviceAuthorization(uid);memberCache=memberCache.filter(p=>p.uid!==uid);},
+  async updateProfile(uid,changes={}){requireAuth();if(!uid)throw new Error('No active profile selected.');const nickname=String(changes.nickname||'').trim();if(!nickname)throw new Error('Enter a nickname.');const profileColor=/^#[0-9a-f]{6}$/i.test(changes.profileColor||'')?changes.profileColor:'#4f6f66';await firebase.fsMod.setDoc(firebase.fsMod.doc(collectionRef('members'),uid),{nickname,profileColor,updatedAt:firebase.fsMod.serverTimestamp()},{merge:true});await refreshMembers();return clone(memberCache.find(p=>p.uid===uid));},
   async renameProfile(uid,name){requireAuth();if(!name.trim())return;await firebase.fsMod.setDoc(firebase.fsMod.doc(collectionRef('members'),uid),{nickname:name.trim()},{merge:true});await refreshMembers();},
   onAuthChanged(callback){if(!firebase){callback(null);return()=>{};}return firebase.authMod.onAuthStateChanged(firebase.auth,callback);},
   async signIn(loginHint='',nickname='',profileUid=''){return beginGoogle({loginHint,nickname,profileUid});},

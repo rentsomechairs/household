@@ -41,3 +41,8 @@ body.modal-open::before {
   z-index: 10001;
 }
 .qr-wrap canvas { image-rendering: pixelated; background: #fff; }
+
+.mobile-event-markers{display:none}.profile-choice-wrap{--profile-color:var(--accent)}.profile-choice-wrap .profile-avatar{background:var(--profile-color)}.profile-edit-preview{display:flex;align-items:center;gap:14px;padding:14px;border-radius:16px;background:var(--accent-soft);margin:14px 0}.profile-edit-preview img,.profile-edit-preview>span{width:64px;height:64px;border-radius:50%;object-fit:cover;display:grid;place-items:center;background:var(--accent);color:#fff;font-weight:800;font-size:22px}.profile-edit-preview small,.profile-edit-preview strong{display:block}.profile-edit-preview small{color:var(--muted);margin-top:3px}.profile-edit-modal input[type=color]{height:52px;padding:5px;cursor:pointer}
+@media(max-width:650px){.calendar-month-card{touch-action:pan-y}.calendar-day{position:relative;min-height:72px}.calendar-day.has-events{background:#fffaf5}.mobile-event-markers{display:flex;position:absolute;left:50%;bottom:6px;transform:translateX(-50%);gap:3px}.mobile-event-markers i{display:block;width:5px;height:5px;border-radius:50%;background:var(--accent)}.calendar-day.selected .mobile-event-markers i{width:6px;height:6px}.day-events-card{margin-top:0}.calendar-toolbar{position:sticky;top:0;z-index:2;background:var(--bg)}}
+
+.profile-edit-preview [hidden]{display:none!important}
