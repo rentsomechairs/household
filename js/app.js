@@ -12,6 +12,11 @@ let pendingAuthProfile=null;
 let pendingNickname="";
 let phoneAuthUnsubscribe=null;
 let phoneAuthCode="";
+let editingEventId=null;
+let pendingCustomPhotoURL=undefined;
+let draggedProfileUid=null;
+let touchDropTarget=null;
+let touchDropAfter=false;
 
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
 const iso=d=>{const local=new Date(d.getTime()-d.getTimezoneOffset()*60000);return local.toISOString().slice(0,10)};
@@ -48,9 +53,10 @@ function enterApp(){
 function profileCard(profile,current=false){
   const displayName=profile.nickname||profile.name||profile.email||'Google user';
   const authorized=dataService.isProfileAuthorized(profile.uid);
-  const photo=profile.photoURL?`<img src="${escapeHtml(profile.photoURL)}" alt="" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span hidden>${initials(displayName)}</span>`:`<span>${initials(displayName)}</span>`;
+  const photoURL=dataService.getProfilePhoto(profile);
+  const photo=photoURL?`<img src="${escapeHtml(photoURL)}" alt="" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span hidden>${initials(displayName)}</span>`:`<span>${initials(displayName)}</span>`;
   const profileStyle=profile.profileColor?` style="--profile-color:${escapeHtml(profile.profileColor)}"`:'';
-  return `<div class="profile-choice-wrap"${profileStyle}><button type="button" class="profile-choice ${current?'current':''} ${authorized?'authorized':''}" data-profile-uid="${escapeHtml(profile.uid)}" data-profile-email="${escapeHtml(profile.email||'')}"><span class="profile-avatar">${photo}</span><strong>${escapeHtml(displayName)}</strong><small>${authorized?'Ready on this device':'Tap to sign in'}</small></button>${profilesEditing?`<button type="button" class="profile-remove" data-remove-profile="${escapeHtml(profile.uid)}" aria-label="Remove household profile">×</button>`:''}</div>`;
+  return `<div class="profile-choice-wrap" data-profile-wrap="${escapeHtml(profile.uid)}" draggable="${profilesEditing?'true':'false'}"${profileStyle}>${profilesEditing?'<button type="button" class="profile-drag-handle" aria-label="Drag to reorder">☰</button>':''}<button type="button" class="profile-choice ${current?'current':''} ${authorized?'authorized':''}" data-profile-uid="${escapeHtml(profile.uid)}" data-profile-email="${escapeHtml(profile.email||'')}"><span class="profile-avatar">${photo}</span><strong>${escapeHtml(displayName)}</strong><small>${authorized?'Ready on this device':'Tap to sign in'}</small></button>${profilesEditing?`<button type="button" class="profile-remove" data-remove-profile="${escapeHtml(profile.uid)}" aria-label="Remove household profile">×</button>`:''}</div>`;
 }
 function renderProfileChooser(){
   const chooser=$('#profileChooser');
@@ -60,7 +66,8 @@ function renderProfileChooser(){
   html+=`<button type="button" class="profile-choice add-profile-choice" id="addGoogleProfile"><span class="profile-avatar"><span class="plus-mark">+</span></span><strong>Add profile</strong><small>Sign in with Google</small></button>`;
   chooser.innerHTML=html;
   $('#continueDemoButton').hidden=dataService.isFirebaseEnabled();
-  $('#manageProfilesButton').textContent=profilesEditing?'Done editing':'Edit profiles';
+  $('#manageProfilesButton').textContent=profilesEditing?'Done deleting / arranging':'Delete profiles';
+  $('#setEchoDeviceButton').hidden=dataService.isEchoDevice();
 }
 async function loadSignedInHousehold(user){
   activeUser=user;
@@ -69,9 +76,11 @@ async function loadSignedInHousehold(user){
   try{state=await dataService.getAll();}finally{hideLoading();}
   const label=user.nickname||user.name||user.displayName||user.email||'Household profile';
   $('#profileInitials').textContent=initials(label);
-  $('#profileInitials').hidden=Boolean(user.photoURL);
-  $('#profilePhoto').hidden=!user.photoURL;
-  if(user.photoURL)$('#profilePhoto').src=user.photoURL;
+  const profileRecord=dataService.getKnownProfiles().find(p=>p.uid===user.uid)||user;
+  const profilePhotoURL=dataService.getProfilePhoto(profileRecord);
+  $('#profileInitials').hidden=Boolean(profilePhotoURL);
+  $('#profilePhoto').hidden=!profilePhotoURL;
+  if(profilePhotoURL)$('#profilePhoto').src=profilePhotoURL;
   $('#signInButton').hidden=true;
   $('#editProfileButton').hidden=false;
   $('#signOutButton').hidden=false;
@@ -91,7 +100,7 @@ function updateGreeting(){const now=new Date();const hour=now.getHours();$('#gre
 function switchView(id){$$('.view').forEach(v=>v.classList.toggle('active',v.id===id));$$('[data-view-target]').forEach(b=>b.classList.toggle('active',b.dataset.viewTarget===id && b.closest('.bottom-nav')));if(id==='calendarView')renderCalendar();window.scrollTo({top:0,behavior:'smooth'});}
 
 function renderUpcoming(){const todayIso=iso(new Date());const items=state.events.filter(e=>e.date>=todayIso).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).slice(0,4);$('#upcomingEvents').innerHTML=items.length?items.map(eventRow).join(''):'<p class="muted">Nothing scheduled yet.</p>';}
-function eventRow(e){const d=parseDate(e.date);return `<div class="event-row"><div class="event-date"><span>${d.toLocaleDateString([],{month:'short'})}</span>${d.getDate()}</div><div><h4>${escapeHtml(e.title)}</h4><p>${formatTime(e.time)}${e.notes?` · ${escapeHtml(e.notes)}`:''}</p></div><button class="icon-button delete-event" data-id="${e.id}" aria-label="Delete event">×</button></div>`;}
+function eventRow(e){const d=parseDate(e.date);return `<div class="event-row" data-event-row="${escapeHtml(e.id)}"><div class="event-date"><span>${d.toLocaleDateString([],{month:'short'})}</span>${d.getDate()}</div><div><h4>${escapeHtml(e.title)}</h4><p>${formatTime(e.time)}${e.notes?` · ${escapeHtml(e.notes)}`:''}</p></div><div class="event-menu-wrap"><button class="icon-button event-menu-button" data-event-menu="${escapeHtml(e.id)}" aria-label="Event options">⋯</button><div class="event-menu" hidden><button type="button" data-edit-event="${escapeHtml(e.id)}">Edit</button><button type="button" class="danger-text" data-delete-event="${escapeHtml(e.id)}">Delete</button></div></div></div>`;}
 
 function taskOccurs(task,date){
   if(task.frequency==='daily')return true;
@@ -149,14 +158,22 @@ function populateTaskAssignees(){
 function renderSettings(){ $('#householdNameInput').value=state.settings.householdName||'Our Home';$('#homeTitleInput').value=state.settings.homeTitle||'Household Hub';$('#authStatus').textContent=dataService.isFirebaseEnabled()?'Firebase is connected. Sign in to sync this household.':'Demo mode is active. Data is stored only in this browser.';$('#signInButton').hidden=!dataService.isFirebaseEnabled();}
 function renderAll(){updateGreeting();renderUpcoming();renderDashboardTasks();renderCalendar();renderLists();renderTaskManager();renderSettings();}
 
-function openEventDialog(){const form=$('#eventForm');form.reset();form.elements.date.value=iso(selectedDate||new Date());$('#eventDialog').showModal();}
+function openEventDialog(event=null){const form=$('#eventForm');form.reset();editingEventId=event?.id||null;$('#eventDialogTitle').textContent=event?'Edit event':'Add an event';$('#saveEventButton').textContent=event?'Save changes':'Save event';form.elements.title.value=event?.title||'';form.elements.date.value=event?.date||iso(selectedDate||new Date());form.elements.time.value=event?.time||'';form.elements.notes.value=event?.notes||'';openDialog($('#eventDialog'));}
 function bindEvents(){
   document.addEventListener('click',e=>{const close=e.target.closest('.dialog-close');if(close){e.preventDefault();const dialog=close.closest('dialog');if(dialog)dialog.close();}});
   $$('[data-view-target]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.viewTarget)));
-  $('#profileButton').addEventListener('click',()=>showProfileGate('Switch household profile'));$('#refreshButton').addEventListener('click',async()=>{await withLoading('Refreshing household…',async()=>{state=await dataService.getAll();renderAll();});showToast('Refreshed')});
+  $('#profileButton').addEventListener('click',()=>openProfileEditor());
+  $('#profileBackButton').addEventListener('click',async()=>{await dataService.signOut();activeUser=null;showProfileGate('Choose a profile to continue');});
+  $('#refreshButton').addEventListener('click',async()=>{await withLoading('Refreshing household…',async()=>{state=await dataService.getAll();renderAll();});showToast('Refreshed')});
   $('#quickAddEventButton').addEventListener('click',openEventDialog);$('#addEventButton').addEventListener('click',openEventDialog);
-  $('#eventForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);const event={id:uid('event'),title:f.get('title').trim(),date:f.get('date'),time:f.get('time'),notes:f.get('notes').trim()};$('#eventDialog').close();await withLoading('Saving event…',()=>dataService.createEvent(event));state.events.push(event);renderAll();showToast('Event added');});
-  document.addEventListener('click',async e=>{const del=e.target.closest('.delete-event');if(del){await withLoading('Removing event…',()=>dataService.deleteEvent(del.dataset.id));state.events=state.events.filter(x=>x.id!==del.dataset.id);renderAll();showToast('Event removed');}});
+  $('#eventForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);const values={title:f.get('title').trim(),date:f.get('date'),time:f.get('time'),notes:f.get('notes').trim()};closeDialog($('#eventDialog'));if(editingEventId){const id=editingEventId;await withLoading('Updating event…',()=>dataService.updateEvent(id,values));const existing=state.events.find(x=>x.id===id);if(existing)Object.assign(existing,values);showToast('Event updated');}else{const event={id:uid('event'),...values};await withLoading('Saving event…',()=>dataService.createEvent(event));state.events.push(event);showToast('Event added');}editingEventId=null;renderAll();});
+  document.addEventListener('click',async e=>{
+    const menuButton=e.target.closest('[data-event-menu]');
+    if(menuButton){e.stopPropagation();document.querySelectorAll('.event-menu').forEach(m=>{if(m!==menuButton.nextElementSibling)m.hidden=true;});menuButton.nextElementSibling.hidden=!menuButton.nextElementSibling.hidden;return;}
+    const edit=e.target.closest('[data-edit-event]');if(edit){const event=state.events.find(x=>x.id===edit.dataset.editEvent);document.querySelectorAll('.event-menu').forEach(m=>m.hidden=true);if(event)openEventDialog(event);return;}
+    const del=e.target.closest('[data-delete-event]');if(del){document.querySelectorAll('.event-menu').forEach(m=>m.hidden=true);const event=state.events.find(x=>x.id===del.dataset.deleteEvent);if(!confirm(`Delete “${event?.title||'this event'}”?`))return;await withLoading('Removing event…',()=>dataService.deleteEvent(del.dataset.deleteEvent));state.events=state.events.filter(x=>x.id!==del.dataset.deleteEvent);renderAll();showToast('Event removed');return;}
+    if(!e.target.closest('.event-menu-wrap'))document.querySelectorAll('.event-menu').forEach(m=>m.hidden=true);
+  });
   $('#taskRangeControl').addEventListener('click',e=>{const b=e.target.closest('button[data-days]');if(!b)return;dashboardDays=+b.dataset.days;$$('#taskRangeControl button').forEach(x=>x.classList.toggle('active',x===b));renderDashboardTasks();});
   document.addEventListener('click',async e=>{const b=e.target.closest('.task-check[data-task-id]');if(!b)return;const key=`${b.dataset.taskId}__${b.dataset.date}`;const done=!state.completions[key];state.completions[key]=done;renderDashboardTasks();try{await dataService.setCompletion(key,done);}catch(error){state.completions[key]=!done;renderDashboardTasks();showToast('Could not save completion');}});
   $('#prevMonth').addEventListener('click',()=>{currentMonth.setMonth(currentMonth.getMonth()-1);renderCalendar()});$('#nextMonth').addEventListener('click',()=>{currentMonth.setMonth(currentMonth.getMonth()+1);renderCalendar()});
@@ -215,14 +232,20 @@ function bindEvents(){
   $('.filter-row').addEventListener('click',e=>{const b=e.target.closest('[data-task-filter]');if(!b)return;taskFilter=b.dataset.taskFilter;$$('[data-task-filter]').forEach(x=>x.classList.toggle('active',x===b));renderTaskManager();});
   $('#taskManagerList').addEventListener('click',async e=>{const b=e.target.closest('.delete-task');if(!b)return;await withLoading('Deleting task…',()=>dataService.deleteTask(b.dataset.id));state.tasks=state.tasks.filter(t=>t.id!==b.dataset.id);renderAll();showToast('Task deleted')});
   $('#saveSettingsButton').addEventListener('click',async()=>{state.settings.householdName=$('#householdNameInput').value.trim();state.settings.homeTitle=$('#homeTitleInput').value.trim();await withLoading('Saving settings…',()=>dataService.saveSettings(state.settings));renderAll();showToast('Settings saved')});
-  $('#editProfileButton').addEventListener('click',()=>{const profile=dataService.getKnownProfiles().find(p=>p.uid===dataService.getCurrentUser()?.uid)||activeUser;if(!profile)return;$('#editProfileNickname').value=profile.nickname||profile.name||'';$('#editProfileColor').value=profile.profileColor||'#4f6f66';$('#editProfileGoogleName').textContent=profile.name||profile.displayName||'';$('#editProfileEmail').textContent=profile.email||'';$('#editProfileFallback').textContent=initials(profile.nickname||profile.name||'HH');$('#editProfilePhoto').hidden=!profile.photoURL;if(profile.photoURL)$('#editProfilePhoto').src=profile.photoURL;openDialog($('#editProfileDialog'));});
-  $('#editProfileForm').addEventListener('submit',async e=>{e.preventDefault();const updated=await withLoading('Saving profile…',()=>dataService.updateProfile(activeUser?.uid||dataService.getCurrentUser()?.uid,{nickname:$('#editProfileNickname').value,profileColor:$('#editProfileColor').value}));activeUser={...activeUser,...updated};closeDialog($('#editProfileDialog'));await dataService.loadProfiles();renderProfileChooser();await loadSignedInHousehold(activeUser);showToast('Profile updated');});
+  $('#editProfileButton').addEventListener('click',openProfileEditor);
+  $('#editProfileImageInput').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{pendingCustomPhotoURL=await resizeProfileImage(file);showEditProfilePreview(pendingCustomPhotoURL);}catch(err){showToast(err.message||'Could not use that image');}});
+  $('#removeCustomProfileImageButton').addEventListener('click',()=>{pendingCustomPhotoURL='';const profile=activeProfile();showEditProfilePreview(profile?.photoURL||'');});
+  $('#editProfileForm').addEventListener('submit',async e=>{e.preventDefault();const changes={nickname:$('#editProfileNickname').value,profileColor:$('#editProfileColor').value};if(pendingCustomPhotoURL!==undefined)changes.customPhotoURL=pendingCustomPhotoURL;const updated=await withLoading('Saving profile…',()=>dataService.updateProfile(activeUser?.uid||dataService.getCurrentUser()?.uid,changes));activeUser={...activeUser,...updated};closeDialog($('#editProfileDialog'));await dataService.loadProfiles();renderProfileChooser();await loadSignedInHousehold(updated);showToast('Profile updated');});
   $('#signInButton').addEventListener('click',()=>showProfileGate('Choose or add a Google profile'));$('#signOutButton').addEventListener('click',async()=>{await dataService.signOut();$('#editProfileButton').hidden=true;showProfileGate('Choose a profile to continue');});
+  $('#setEchoDeviceButton').addEventListener('click',()=>{dataService.setEchoDevice();$('#setEchoDeviceButton').hidden=true;showToast('This device will always start on the profile screen');});
+  $('#resetEchoDeviceButton').addEventListener('click',()=>{dataService.resetEchoDevice();$('#setEchoDeviceButton').hidden=false;showToast('Echo Show setting reset');});
   $('#profileChooser').addEventListener('click',async e=>{
     const remove=e.target.closest('[data-remove-profile]');
     if(remove){
       e.stopPropagation();
       const uid=remove.dataset.removeProfile;
+      const profile=dataService.getKnownProfiles().find(p=>p.uid===uid);
+      if(!confirm(`Delete ${profile?.nickname||profile?.name||'this profile'} from Household Hub?`))return;
       const current=dataService.getCurrentUser();
       await withLoading('Removing profile…',()=>dataService.forgetProfile(uid));
       if(current?.uid===uid)await dataService.signOut();
@@ -242,6 +265,13 @@ function bindEvents(){
       }
     }catch(err){showToast(err.message||'Google sign-in failed');}
   });
+  $('#profileChooser').addEventListener('dragstart',e=>{const wrap=e.target.closest('[data-profile-wrap]');if(!profilesEditing||!wrap)return;draggedProfileUid=wrap.dataset.profileWrap;wrap.classList.add('dragging');e.dataTransfer.effectAllowed='move';});
+  $('#profileChooser').addEventListener('dragover',e=>{if(!draggedProfileUid)return;e.preventDefault();const target=e.target.closest('[data-profile-wrap]');document.querySelectorAll('[data-profile-wrap]').forEach(x=>x.classList.remove('drop-before','drop-after'));if(!target||target.dataset.profileWrap===draggedProfileUid)return;const after=e.clientY>target.getBoundingClientRect().top+target.offsetHeight/2;target.classList.add(after?'drop-after':'drop-before');});
+  $('#profileChooser').addEventListener('drop',async e=>{e.preventDefault();const target=e.target.closest('[data-profile-wrap]');if(!target||!draggedProfileUid)return;const wraps=[...document.querySelectorAll('[data-profile-wrap]')];const ids=wraps.map(x=>x.dataset.profileWrap).filter(x=>x!==draggedProfileUid);let index=ids.indexOf(target.dataset.profileWrap);if(target.classList.contains('drop-after'))index++;ids.splice(Math.max(0,index),0,draggedProfileUid);await withLoading('Saving profile order…',()=>dataService.reorderProfiles(ids));draggedProfileUid=null;renderProfileChooser();});
+  $('#profileChooser').addEventListener('dragend',()=>{draggedProfileUid=null;document.querySelectorAll('[data-profile-wrap]').forEach(x=>x.classList.remove('dragging','drop-before','drop-after'));});
+  $('#profileChooser').addEventListener('pointerdown',e=>{const handle=e.target.closest('.profile-drag-handle');if(!handle||e.pointerType==='mouse')return;const wrap=handle.closest('[data-profile-wrap]');draggedProfileUid=wrap?.dataset.profileWrap||null;if(!draggedProfileUid)return;handle.setPointerCapture?.(e.pointerId);wrap.classList.add('dragging');e.preventDefault();});
+  $('#profileChooser').addEventListener('pointermove',e=>{if(!draggedProfileUid||e.pointerType==='mouse')return;const target=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('[data-profile-wrap]');document.querySelectorAll('[data-profile-wrap]').forEach(x=>x.classList.remove('drop-before','drop-after'));if(!target||target.dataset.profileWrap===draggedProfileUid)return;touchDropTarget=target;touchDropAfter=e.clientY>target.getBoundingClientRect().top+target.offsetHeight/2;target.classList.add(touchDropAfter?'drop-after':'drop-before');e.preventDefault();});
+  $('#profileChooser').addEventListener('pointerup',async e=>{if(!draggedProfileUid||e.pointerType==='mouse')return;const moving=draggedProfileUid;draggedProfileUid=null;if(touchDropTarget){const ids=[...document.querySelectorAll('[data-profile-wrap]')].map(x=>x.dataset.profileWrap).filter(x=>x!==moving);let index=ids.indexOf(touchDropTarget.dataset.profileWrap);if(touchDropAfter)index++;ids.splice(Math.max(0,index),0,moving);await withLoading('Saving profile order…',()=>dataService.reorderProfiles(ids));}touchDropTarget=null;document.querySelectorAll('[data-profile-wrap]').forEach(x=>x.classList.remove('dragging','drop-before','drop-after'));renderProfileChooser();});
   $('#nicknameForm').addEventListener('submit',async e=>{
     e.preventDefault();
     const nickname=$('#profileNicknameInput').value.trim();
@@ -317,6 +347,10 @@ function bindEvents(){
   $('#manageProfilesButton').addEventListener('click',()=>{profilesEditing=!profilesEditing;renderProfileChooser();});
   $('#continueDemoButton').addEventListener('click',async()=>{state=await dataService.getAll();activeUser={displayName:'Demo Home',email:'',photoURL:''};$('#profileInitials').textContent='DH';$('#profileInitials').hidden=false;$('#profilePhoto').hidden=true;renderAll();enterApp();});
 }
+function showEditProfilePreview(url){const img=$('#editProfilePhoto'),fallback=$('#editProfileFallback');img.hidden=!url;fallback.hidden=Boolean(url);if(url)img.src=url;}
+function openProfileEditor(){const profile=activeProfile();if(!profile)return;pendingCustomPhotoURL=undefined;$('#editProfileImageInput').value='';$('#editProfileNickname').value=profile.nickname||profile.name||'';$('#editProfileColor').value=profile.profileColor||'#4f6f66';$('#editProfileGoogleName').textContent=profile.name||profile.displayName||'';$('#editProfileEmail').textContent=profile.email||'';$('#editProfileFallback').textContent=initials(profile.nickname||profile.name||'HH');showEditProfilePreview(dataService.getProfilePhoto(profile));openDialog($('#editProfileDialog'));}
+async function resizeProfileImage(file){if(!file.type.startsWith('image/'))throw new Error('Choose an image file.');if(file.size>12*1024*1024)throw new Error('Choose an image under 12 MB.');let source,width,height,cleanup=()=>{};if('createImageBitmap'in window){source=await createImageBitmap(file);width=source.width;height=source.height;cleanup=()=>source.close?.();}else{const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});source=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=data;});width=source.naturalWidth;height=source.naturalHeight;}const size=256,canvas=document.createElement('canvas');canvas.width=size;canvas.height=size;const ctx=canvas.getContext('2d');const scale=Math.max(size/width,size/height);const w=width*scale,h=height*scale;ctx.drawImage(source,(size-w)/2,(size-h)/2,w,h);cleanup();return canvas.toDataURL('image/jpeg',0.78);}
+
 function updateTaskForm(){
   const f=$('#taskFrequency').value;
   $('#weeklySchedule').hidden=f!=='weekly';
@@ -347,7 +381,9 @@ async function init(){
     return;
   }
   dataService.onAuthChanged(async()=>{try{await dataService.loadProfiles();renderProfileChooser();}catch(err){console.error(err);}});
-  showProfileGate('Select a profile to continue');
+  const current=dataService.getCurrentUser();
+  if(current&&!current.isAnonymous&&dataService.isGoogleSignedIn()&&!dataService.isEchoDevice()){const profile=dataService.getKnownProfiles().find(p=>p.uid===current.uid);if(profile){await loadSignedInHousehold(profile);enterApp();return;}}
+  showProfileGate(dataService.isEchoDevice()?'Choose a profile':'Select a profile to continue');
 }
 
 init();

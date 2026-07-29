@@ -46,3 +46,21 @@ body.modal-open::before {
 @media(max-width:650px){.calendar-month-card{touch-action:pan-y}.calendar-day{position:relative;min-height:72px}.calendar-day.has-events{background:#fffaf5}.mobile-event-markers{display:flex;position:absolute;left:50%;bottom:6px;transform:translateX(-50%);gap:3px}.mobile-event-markers i{display:block;width:5px;height:5px;border-radius:50%;background:var(--accent)}.calendar-day.selected .mobile-event-markers i{width:6px;height:6px}.day-events-card{margin-top:0}.calendar-toolbar{position:sticky;top:0;z-index:2;background:var(--bg)}}
 
 .profile-edit-preview [hidden]{display:none!important}
+
+
+/* Profile/device/event controls */
+.profile-back-button{font-size:1.35rem;font-weight:700}
+.echo-setup-button{border:1px dashed rgba(79,111,102,.45)}
+.profile-choice-wrap{position:relative}
+.profile-drag-handle{position:absolute;left:50%;top:-.35rem;transform:translateX(-50%);z-index:4;border:0;background:#fff;border-radius:999px;padding:.15rem .55rem;box-shadow:0 2px 10px rgba(0,0,0,.14);cursor:grab;font-size:1rem}
+.profile-choice-wrap.dragging{opacity:.4}
+.profile-choice-wrap.drop-before::before,.profile-choice-wrap.drop-after::after{content:"";position:absolute;left:-8px;right:-8px;height:5px;border-radius:8px;background:var(--profile-color,#4f6f66);z-index:8}
+.profile-choice-wrap.drop-before::before{top:-10px}.profile-choice-wrap.drop-after::after{bottom:-10px}
+.event-menu-wrap{position:relative;margin-left:auto}
+.event-menu-button{font-size:1.45rem;line-height:1}
+.event-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:20;min-width:120px;padding:.35rem;background:#fff;border:1px solid rgba(0,0,0,.12);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.17)}
+.event-menu button{display:block;width:100%;padding:.7rem .8rem;border:0;background:transparent;text-align:left;border-radius:8px;font:inherit}
+.event-menu button:hover{background:#f2eee7}.event-menu .danger-text{color:#a33a33}
+.profile-edit-preview img{width:72px;height:72px;border-radius:50%;object-fit:cover}
+#editProfileImageInput{padding:.65rem;background:#fff}
+@media(max-width:600px){.event-menu{position:fixed;right:1rem;top:auto;min-width:160px}.profile-drag-handle{padding:.25rem .7rem}}

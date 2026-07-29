@@ -6,6 +6,8 @@ let householdId=FIREBASE_SETTINGS.householdId||'primary-home';
 let memberCache=[];
 const PENDING_ACTION_KEY='householdHubPendingAuthAction';
 const DEVICE_AUTH_KEY='householdHubAuthorizedProfiles';
+const DEVICE_MODE_KEY='householdHubDeviceMode';
+const LAST_PROFILE_KEY='householdHubLastProfile';
 const clone=value=>JSON.parse(JSON.stringify(value));
 
 function shouldUseRedirect(){return /Silk\/|Kindle|KF[A-Z]{2,}|Echo/i.test(navigator.userAgent||'');}
@@ -44,8 +46,33 @@ function isGoogleUser(user=firebase?.auth.currentUser){return Boolean(user&&!use
 async function ensureAnonymousSession(){if(!firebase.auth.currentUser)await firebase.authMod.signInAnonymously(firebase.auth);return firebase.auth.currentUser;}
 async function ensureHousehold(){const ref=householdRef();const snap=await firebase.fsMod.getDoc(ref);if(!snap.exists())await firebase.fsMod.setDoc(ref,{createdAt:firebase.fsMod.serverTimestamp(),schemaVersion:3},{merge:true});}
 async function docsToArray(name){const snap=await firebase.fsMod.getDocs(collectionRef(name));return snap.docs.map(d=>({id:d.id,...d.data()}));}
-async function refreshMembers(){await ensureAnonymousSession();memberCache=(await docsToArray('members')).sort((a,b)=>(a.nickname||a.name||'').localeCompare(b.nickname||b.name||''));return clone(memberCache);}
-async function upsertCurrentMember(nickname=''){requireAuth();const user=firebase.auth.currentUser;if(user.isAnonymous)throw new Error('Google sign-in is required to create a profile.');const ref=firebase.fsMod.doc(collectionRef('members'),user.uid);const prior=memberCache.find(p=>p.uid===user.uid);await firebase.fsMod.setDoc(ref,{uid:user.uid,nickname:nickname.trim()||prior?.nickname||user.displayName||user.email||'Google user',name:user.displayName||user.email||'Google user',email:user.email||'',photoURL:user.photoURL||'',lastSeenAt:firebase.fsMod.serverTimestamp()},{merge:true});await refreshMembers();return user.uid;}
+function memberSortValue(member){
+  if(Number.isFinite(Number(member.profileOrder)))return Number(member.profileOrder);
+  if(Number.isFinite(Number(member.createdAtMs)))return Number(member.createdAtMs);
+  if(member.createdAt?.toMillis)return member.createdAt.toMillis();
+  if(member.lastSeenAt?.toMillis)return member.lastSeenAt.toMillis();
+  return Number.MAX_SAFE_INTEGER;
+}
+async function refreshMembers(){await ensureAnonymousSession();memberCache=(await docsToArray('members')).sort((a,b)=>memberSortValue(a)-memberSortValue(b));return clone(memberCache);}
+async function upsertCurrentMember(nickname=''){
+  requireAuth();
+  const user=firebase.auth.currentUser;
+  if(user.isAnonymous)throw new Error('Google sign-in is required to create a profile.');
+  const ref=firebase.fsMod.doc(collectionRef('members'),user.uid);
+  const snap=await firebase.fsMod.getDoc(ref);
+  const existing=snap.exists()?snap.data():null;
+  const now=Date.now();
+  if(existing){
+    const updates={photoURL:user.photoURL||'',lastSeenAt:firebase.fsMod.serverTimestamp()};
+    if(nickname.trim())updates.nickname=nickname.trim();
+    await firebase.fsMod.setDoc(ref,updates,{merge:true});
+  }else{
+    await firebase.fsMod.setDoc(ref,{uid:user.uid,name:user.displayName||user.email||'Google user',email:user.email||'',photoURL:user.photoURL||'',nickname:nickname.trim()||user.displayName||user.email||'Google user',lastSeenAt:firebase.fsMod.serverTimestamp(),createdAt:firebase.fsMod.serverTimestamp(),createdAtMs:now,profileOrder:now},{merge:true});
+  }
+  localStorage.setItem(LAST_PROFILE_KEY,user.uid);
+  await refreshMembers();
+  return user.uid;
+}
 async function beginGoogle(action={}){
   if(firebase.auth.currentUser?.isAnonymous)await firebase.authMod.signOut(firebase.auth);
   const provider=new firebase.authMod.GoogleAuthProvider();
@@ -68,12 +95,18 @@ export const dataService={
   getCurrentUser(){return firebase?.auth.currentUser||null;},
   isGoogleSignedIn(){return isGoogleUser();},
   getKnownProfiles(){return clone(memberCache);},
+  getProfilePhoto(profile){return profile?.customPhotoURL||profile?.photoURL||'';},
+  isEchoDevice(){return localStorage.getItem(DEVICE_MODE_KEY)==='echo';},
+  setEchoDevice(){localStorage.setItem(DEVICE_MODE_KEY,'echo');},
+  resetEchoDevice(){localStorage.removeItem(DEVICE_MODE_KEY);},
+  getLastProfileUid(){return localStorage.getItem(LAST_PROFILE_KEY)||'';},
   async loadProfiles(){return refreshMembers();},
   isProfileAuthorized(uid){return isGoogleUser()&&firebase.auth.currentUser.uid===uid||Boolean(authorizedMap()[uid]);},
   authorizeProfileOnDevice,
   removeDeviceAuthorization(uid){const map=authorizedMap();delete map[uid];saveAuthorizedMap(map);},
   async forgetProfile(uid){requireAuth();await firebase.fsMod.deleteDoc(firebase.fsMod.doc(collectionRef('members'),uid));this.removeDeviceAuthorization(uid);memberCache=memberCache.filter(p=>p.uid!==uid);},
-  async updateProfile(uid,changes={}){requireAuth();if(!uid)throw new Error('No active profile selected.');const nickname=String(changes.nickname||'').trim();if(!nickname)throw new Error('Enter a nickname.');const profileColor=/^#[0-9a-f]{6}$/i.test(changes.profileColor||'')?changes.profileColor:'#4f6f66';await firebase.fsMod.setDoc(firebase.fsMod.doc(collectionRef('members'),uid),{nickname,profileColor,updatedAt:firebase.fsMod.serverTimestamp()},{merge:true});await refreshMembers();return clone(memberCache.find(p=>p.uid===uid));},
+  async updateProfile(uid,changes={}){requireAuth();if(!uid)throw new Error('No active profile selected.');const nickname=String(changes.nickname||'').trim();if(!nickname)throw new Error('Enter a nickname.');const profileColor=/^#[0-9a-f]{6}$/i.test(changes.profileColor||'')?changes.profileColor:'#4f6f66';const payload={nickname,profileColor,updatedAt:firebase.fsMod.serverTimestamp()};if(Object.prototype.hasOwnProperty.call(changes,'customPhotoURL'))payload.customPhotoURL=changes.customPhotoURL||firebase.fsMod.deleteField();await firebase.fsMod.setDoc(firebase.fsMod.doc(collectionRef('members'),uid),payload,{merge:true});await refreshMembers();return clone(memberCache.find(p=>p.uid===uid));},
+  async reorderProfiles(orderedUids){requireAuth();const current=new Map(memberCache.map(p=>[p.uid,Number(p.profileOrder)]));const batch=firebase.fsMod.writeBatch(firebase.db);let writes=0;orderedUids.forEach((uid,index)=>{if(current.get(uid)!==index){batch.update(firebase.fsMod.doc(collectionRef('members'),uid),{profileOrder:index});writes++;}});if(writes)await batch.commit();await refreshMembers();return clone(memberCache);},
   async renameProfile(uid,name){requireAuth();if(!name.trim())return;await firebase.fsMod.setDoc(firebase.fsMod.doc(collectionRef('members'),uid),{nickname:name.trim()},{merge:true});await refreshMembers();},
   onAuthChanged(callback){if(!firebase){callback(null);return()=>{};}return firebase.authMod.onAuthStateChanged(firebase.auth,callback);},
   async signIn(loginHint='',nickname='',profileUid=''){return beginGoogle({loginHint,nickname,profileUid});},
@@ -98,7 +131,7 @@ export const dataService={
   async signInForApproval(code){return beginGoogle({approvalCode:code});},
   setHousehold(id){householdId=id||FIREBASE_SETTINGS.householdId||'primary-home';},getHouseholdId(){return householdId;},
   async getAll(){requireAuth();await ensureHousehold();const [settingsSnap,events,lists,tasks,completionDocs,members]=await Promise.all([firebase.fsMod.getDoc(firebase.fsMod.doc(collectionRef('configuration'),'settings')),docsToArray('events'),docsToArray('lists'),docsToArray('tasks'),docsToArray('completions'),refreshMembers()]);const completions={};completionDocs.forEach(x=>{completions[x.id]=Boolean(x.done);});return {settings:settingsSnap.exists()?settingsSnap.data():clone(demoData.settings),events,lists,tasks,completions,members};},
-  async createEvent(event){requireAuth();await firebase.fsMod.setDoc(firebase.fsMod.doc(collectionRef('events'),event.id),clean(event));},async deleteEvent(id){requireAuth();await firebase.fsMod.deleteDoc(firebase.fsMod.doc(collectionRef('events'),id));},
+  async createEvent(event){requireAuth();await firebase.fsMod.setDoc(firebase.fsMod.doc(collectionRef('events'),event.id),clean(event));},async updateEvent(id,changes){requireAuth();await firebase.fsMod.updateDoc(firebase.fsMod.doc(collectionRef('events'),id),clean(changes));},async deleteEvent(id){requireAuth();await firebase.fsMod.deleteDoc(firebase.fsMod.doc(collectionRef('events'),id));},
   async createTask(task){requireAuth();await firebase.fsMod.setDoc(firebase.fsMod.doc(collectionRef('tasks'),task.id),clean(task));},async deleteTask(id){requireAuth();await firebase.fsMod.deleteDoc(firebase.fsMod.doc(collectionRef('tasks'),id));},async setCompletion(id,done){requireAuth();const ref=firebase.fsMod.doc(collectionRef('completions'),id);if(done)await firebase.fsMod.setDoc(ref,{done:true});else await firebase.fsMod.deleteDoc(ref);},
   async createList(list){requireAuth();await firebase.fsMod.setDoc(firebase.fsMod.doc(collectionRef('lists'),list.id),clean(list));},async updateList(list){requireAuth();await firebase.fsMod.setDoc(firebase.fsMod.doc(collectionRef('lists'),list.id),clean(list));},async updateListItems(id,items){requireAuth();await firebase.fsMod.updateDoc(firebase.fsMod.doc(collectionRef('lists'),id),{items:clean(items)});},async deleteList(id){requireAuth();await firebase.fsMod.deleteDoc(firebase.fsMod.doc(collectionRef('lists'),id));},async saveSettings(settings){requireAuth();await firebase.fsMod.setDoc(firebase.fsMod.doc(collectionRef('configuration'),'settings'),clean(settings),{merge:true});}
 };
