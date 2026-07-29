@@ -83,7 +83,7 @@ async function loadSignedInHousehold(user){
   if(profilePhotoURL)$('#profilePhoto').src=profilePhotoURL;
   $('#signInButton').hidden=true;
   $('#editProfileButton').hidden=false;
-  $('#signOutButton').hidden=false;
+  $('#signOutButton').hidden=true;
   $('#authStatus').textContent=`Using ${label} · Shared household: ${dataService.getHouseholdId()}`;
   renderAll();
 }
@@ -163,7 +163,7 @@ function bindEvents(){
   document.addEventListener('click',e=>{const close=e.target.closest('.dialog-close');if(close){e.preventDefault();const dialog=close.closest('dialog');if(dialog)dialog.close();}});
   $$('[data-view-target]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.viewTarget)));
   $('#profileButton').addEventListener('click',()=>openProfileEditor());
-  $('#profileBackButton').addEventListener('click',async()=>{await dataService.signOut();activeUser=null;showProfileGate('Choose a profile to continue');});
+  $('#profileBackButton').addEventListener('click',()=>{activeUser=null;showProfileGate('Choose a profile to continue');});
   $('#refreshButton').addEventListener('click',async()=>{await withLoading('Refreshing household…',async()=>{state=await dataService.getAll();renderAll();});showToast('Refreshed')});
   $('#quickAddEventButton').addEventListener('click',openEventDialog);$('#addEventButton').addEventListener('click',openEventDialog);
   $('#eventForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);const values={title:f.get('title').trim(),date:f.get('date'),time:f.get('time'),notes:f.get('notes').trim()};closeDialog($('#eventDialog'));if(editingEventId){const id=editingEventId;await withLoading('Updating event…',()=>dataService.updateEvent(id,values));const existing=state.events.find(x=>x.id===id);if(existing)Object.assign(existing,values);showToast('Event updated');}else{const event={id:uid('event'),...values};await withLoading('Saving event…',()=>dataService.createEvent(event));state.events.push(event);showToast('Event added');}editingEventId=null;renderAll();});
@@ -236,7 +236,7 @@ function bindEvents(){
   $('#editProfileImageInput').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{pendingCustomPhotoURL=await resizeProfileImage(file);showEditProfilePreview(pendingCustomPhotoURL);}catch(err){showToast(err.message||'Could not use that image');}});
   $('#removeCustomProfileImageButton').addEventListener('click',()=>{pendingCustomPhotoURL='';const profile=activeProfile();showEditProfilePreview(profile?.photoURL||'');});
   $('#editProfileForm').addEventListener('submit',async e=>{e.preventDefault();const changes={nickname:$('#editProfileNickname').value,profileColor:$('#editProfileColor').value};if(pendingCustomPhotoURL!==undefined)changes.customPhotoURL=pendingCustomPhotoURL;const updated=await withLoading('Saving profile…',()=>dataService.updateProfile(activeUser?.uid||dataService.getCurrentUser()?.uid,changes));activeUser={...activeUser,...updated};closeDialog($('#editProfileDialog'));await dataService.loadProfiles();renderProfileChooser();await loadSignedInHousehold(updated);showToast('Profile updated');});
-  $('#signInButton').addEventListener('click',()=>showProfileGate('Choose or add a Google profile'));$('#signOutButton').addEventListener('click',async()=>{await dataService.signOut();$('#editProfileButton').hidden=true;showProfileGate('Choose a profile to continue');});
+  $('#signInButton').addEventListener('click',()=>showProfileGate('Choose or add a Google profile'));$('#signOutButton').hidden=true;
   $('#setEchoDeviceButton').addEventListener('click',()=>{dataService.setEchoDevice();$('#setEchoDeviceButton').hidden=true;showToast('This device will always start on the profile screen');});
   $('#resetEchoDeviceButton').addEventListener('click',()=>{dataService.resetEchoDevice();$('#setEchoDeviceButton').hidden=false;showToast('Echo Show setting reset');});
   $('#profileChooser').addEventListener('click',async e=>{
@@ -248,7 +248,7 @@ function bindEvents(){
       if(!confirm(`Delete ${profile?.nickname||profile?.name||'this profile'} from Household Hub?`))return;
       const current=dataService.getCurrentUser();
       await withLoading('Removing profile…',()=>dataService.forgetProfile(uid));
-      if(current?.uid===uid)await dataService.signOut();
+      if(current?.uid===uid)activeUser=null;
       renderProfileChooser();
       showToast('Profile removed from the household');
       return;

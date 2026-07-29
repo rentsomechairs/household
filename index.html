@@ -38,7 +38,7 @@
       </div>
       <div class="topbar-actions">
         <button class="icon-button" id="refreshButton" aria-label="Refresh">↻</button>
-        <button class="icon-button profile-back-button" id="profileBackButton" aria-label="Log out and choose a profile">←</button>
+        <button class="icon-button profile-back-button" id="profileBackButton" aria-label="Switch profiles">←</button>
         <button class="profile-button" id="profileButton" aria-label="Edit profile">
           <span id="profileInitials">HH</span>
           <img id="profilePhoto" alt="Profile" hidden />
@@ -153,7 +153,7 @@
             <div id="authStatus" class="status-box">Demo mode is active.</div>
             <button class="primary-button wide" id="signInButton">Sign in with Google</button>
             <button class="secondary-button wide" id="editProfileButton" hidden>Edit my profile</button>
-            <button class="secondary-button wide" id="signOutButton" hidden>Sign out</button>
+            <button class="secondary-button wide" id="signOutButton" hidden aria-hidden="true" tabindex="-1">Sign out</button>
             <button class="secondary-button wide" id="resetEchoDeviceButton">Reset Echo Show setting</button>
           </article>
           <article class="card settings-card">

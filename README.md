@@ -82,3 +82,8 @@ In Firebase Console, open **Authentication → Sign-in method** and enable both:
 Anonymous Authentication is used only to let a new device load the household profile list and wait for a phone approval. Household profiles and app data remain stored in Firestore.
 
 Publish the included `firestore.rules` after uploading this version because it adds the `authRequests` subcollection used by QR sign-in.
+
+
+## Profile switching
+
+The arrow beside the active profile picture returns to the profile chooser without signing out of Google. Profiles are only removed through Delete profiles.
