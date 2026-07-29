@@ -10,9 +10,14 @@ service cloud.firestore {
       match /configuration/{documentId} {
         allow read, write: if signedIn();
       }
+
+      // Profile names/photos must be readable before a device signs in so the
+      // profile picker can appear on new phones and the Echo Show.
       match /members/{memberId} {
-        allow read, create, update, delete: if signedIn();
+        allow read: if true;
+        allow create, update, delete: if signedIn();
       }
+
       match /events/{eventId} {
         allow read, create, update, delete: if signedIn();
       }
@@ -25,8 +30,12 @@ service cloud.firestore {
       match /completions/{completionId} {
         allow read, create, update, delete: if signedIn();
       }
+
+      // A signed-out display may create and watch a one-time approval request.
+      // Only a signed-in Google user can approve/update it.
       match /authRequests/{requestId} {
-        allow read, create, update, delete: if signedIn();
+        allow create, read, delete: if true;
+        allow update: if signedIn();
       }
     }
 

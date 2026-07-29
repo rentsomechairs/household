@@ -127,7 +127,7 @@ function renderCalendar(){const y=currentMonth.getFullYear(),m=currentMonth.getM
 function renderSelectedDay(){const events=state.events.filter(e=>e.date===iso(selectedDate)).sort((a,b)=>a.time.localeCompare(b.time));$('#selectedDateLabel').textContent=selectedDate.toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'});$('#selectedDayEvents').innerHTML=events.length?events.map(eventRow).join(''):'<p class="muted">No events for this day.</p>';}
 
 function renderLists(){$('#listsGrid').innerHTML=state.lists.length?state.lists.map(l=>{const done=l.items.filter(i=>i.done).length,total=l.items.length,pct=total?Math.round(done/total*100):0;return `<article class="card list-card" data-list-id="${l.id}"><div class="list-card-header"><div><p class="section-kicker">${l.type}</p><h3>${escapeHtml(l.name)}</h3></div><span class="badge">${done}/${total}</span></div><div class="progress-track"><div class="progress-bar" style="width:${pct}%"></div></div></article>`}).join(''):'<div class="card"><p class="muted">Create your first household list.</p></div>';}
-function openList(id){activeListId=id;const list=state.lists.find(l=>l.id===id);if(!list)return;$('#listDetailTitle').textContent=list.name;$('#clearListChecksButton').hidden=list.type!=='repeating';renderListItems();$('#listDetailDialog').showModal();}
+function openList(id){activeListId=id;const list=state.lists.find(l=>l.id===id);if(!list)return;$('#listDetailTitle').textContent=list.name;$('#clearListChecksButton').hidden=list.type!=='repeating';renderListItems();openDialog($('#listDetailDialog'));}
 function renderListItems(){const list=state.lists.find(l=>l.id===activeListId);$('#listDetailItems').innerHTML=list.items.length?list.items.map(i=>`<div class="detail-item ${i.done?'done':''}"><button type="button" class="task-check list-item-check ${i.done?'done':''}" data-id="${i.id}">${i.done?'✓':''}</button><span>${escapeHtml(i.text)}</span><button type="button" class="icon-button delete-list-item" data-id="${i.id}">×</button></div>`).join(''):'<p class="muted">No items yet.</p>';}
 
 function renderTaskManager(){const filtered=state.tasks.filter(t=>taskVisibleToCurrentUser(t)&&(taskFilter==='all'||t.frequency===taskFilter));$('#taskManagerList').innerHTML=filtered.length?filtered.map(t=>`<article class="card manager-card"><div><p class="section-kicker">${t.frequency}</p><h3>${escapeHtml(t.title)}</h3><p class="muted">${taskScheduleText(t)} · ${escapeHtml(taskAssigneeLabel(t))}</p></div><div class="manager-actions"><button class="danger-button delete-task" data-id="${t.id}">Delete</button></div></article>`).join(''):'<div class="card"><p class="muted">No tasks in this category.</p></div>';}
@@ -179,7 +179,7 @@ function bindEvents(){
   $('#prevMonth').addEventListener('click',()=>{currentMonth.setMonth(currentMonth.getMonth()-1);renderCalendar()});$('#nextMonth').addEventListener('click',()=>{currentMonth.setMonth(currentMonth.getMonth()+1);renderCalendar()});
   let calendarTouchStartX=0,calendarTouchStartY=0;const calendarCard=$('.calendar-month-card');calendarCard.addEventListener('touchstart',e=>{const t=e.changedTouches[0];calendarTouchStartX=t.clientX;calendarTouchStartY=t.clientY;},{passive:true});calendarCard.addEventListener('touchend',e=>{const t=e.changedTouches[0],dx=t.clientX-calendarTouchStartX,dy=t.clientY-calendarTouchStartY;if(Math.abs(dx)<55||Math.abs(dx)<Math.abs(dy)*1.25)return;currentMonth.setMonth(currentMonth.getMonth()+(dx<0?1:-1));selectedDate=new Date(currentMonth.getFullYear(),currentMonth.getMonth(),1);renderCalendar();},{passive:true});
   $('#calendarGrid').addEventListener('click',e=>{const b=e.target.closest('[data-date]');if(!b)return;selectedDate=parseDate(b.dataset.date);currentMonth=new Date(selectedDate.getFullYear(),selectedDate.getMonth(),1);renderCalendar();});
-  $('#addListButton').addEventListener('click',()=>{$('#listForm').reset();$('#listDialog').showModal()});
+  $('#addListButton').addEventListener('click',()=>{$('#listForm').reset();openDialog($('#listDialog'))});
   $('#listForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);const list={id:uid('list'),name:f.get('name').trim(),type:f.get('type'),resetOnComplete:f.get('resetOnComplete')==='on',items:[]};$('#listDialog').close();await withLoading('Creating list…',()=>dataService.createList(list));state.lists.push(list);renderAll();showToast('List created');});
   $('#listsGrid').addEventListener('click',e=>{const card=e.target.closest('[data-list-id]');if(card)openList(card.dataset.listId)});
   $('#addListItemButton').addEventListener('click',async()=>{const input=$('#newListItemInput');const text=input.value.trim();if(!text)return;const list=state.lists.find(l=>l.id===activeListId);const previousItems=structuredClone(list.items);list.items.push({id:uid('item'),text,done:false});input.value='';renderListItems();renderLists();try{await withLoading('Saving list…',()=>dataService.updateListItems(list.id,list.items));}catch(error){list.items=previousItems;renderListItems();renderLists();}});
@@ -196,7 +196,7 @@ function bindEvents(){
         $('#listDetailDialog').close();
         await withLoading('Completing temporary list…',()=>dataService.deleteList(list.id));
         state.lists=state.lists.filter(item=>item.id!==list.id);activeListId=null;renderAll();showToast('Temporary list completed and removed');
-      }catch(error){list.items=previousItems;renderListItems();renderLists();$('#listDetailDialog').showModal();}
+      }catch(error){list.items=previousItems;renderListItems();renderLists();openDialog($('#listDetailDialog'));}
       return;
     }
     try{await withLoading('Saving list…',()=>dataService.updateListItems(list.id,list.items));}catch(error){list.items=previousItems;renderListItems();renderLists();}
@@ -209,7 +209,7 @@ function bindEvents(){
     catch(error){list.items=previousItems;renderListItems();renderLists();}
   });
   $('#deleteListButton').addEventListener('click',async()=>{const id=activeListId;$('#listDetailDialog').close();await withLoading('Deleting list…',()=>dataService.deleteList(id));state.lists=state.lists.filter(l=>l.id!==id);renderAll();showToast('List deleted')});
-  $('#addTaskButton').addEventListener('click',()=>{$('#taskForm').reset();populateTaskAssignees();updateTaskForm();$('#taskDialog').showModal()});$('#taskFrequency').addEventListener('change',updateTaskForm);$('#monthlyMode').addEventListener('change',updateMonthlyForm);
+  $('#addTaskButton').addEventListener('click',()=>{$('#taskForm').reset();populateTaskAssignees();updateTaskForm();openDialog($('#taskDialog'))});$('#taskFrequency').addEventListener('change',updateTaskForm);$('#monthlyMode').addEventListener('change',updateMonthlyForm);
   $('#weekdayQuickOptions').addEventListener('click',e=>{const button=e.target.closest('[data-day-preset]');if(!button)return;const preset=button.dataset.dayPreset;const selected=preset==='weekdays'?[1,2,3,4,5]:preset==='weekend'?[0,6]:preset==='everyday'?[0,1,2,3,4,5,6]:[];$$('#weeklyDays input').forEach(input=>{input.checked=selected.includes(Number(input.value));});});
   $('#taskForm').addEventListener('submit',async e=>{
     e.preventDefault();
@@ -256,12 +256,12 @@ function bindEvents(){
     const add=e.target.closest('#addGoogleProfile');
     const profileButton=e.target.closest('[data-profile-uid]');
     try{
-      if(add){pendingAuthProfile=null;pendingNickname='';$('#nicknameForm').reset();$('#nicknameDialog').showModal();setTimeout(()=>$('#profileNicknameInput').focus(),50);return;}
+      if(add){pendingAuthProfile=null;pendingNickname='';$('#nicknameForm').reset();openDialog($('#nicknameDialog'));setTimeout(()=>$('#profileNicknameInput').focus(),50);return;}
       if(profileButton){
         const profile=dataService.getKnownProfiles().find(p=>p.uid===profileButton.dataset.profileUid);
         if(!profile)return;
         if(dataService.isProfileAuthorized(profile.uid)){await loadSignedInHousehold(profile);enterApp();return;}
-        pendingAuthProfile=profile;pendingNickname='';$('#signInChoiceTitle').textContent=`Sign in as ${profile.nickname||profile.name||'this profile'}`;$('#signInChoiceDialog').showModal();
+        pendingAuthProfile=profile;pendingNickname='';$('#signInChoiceTitle').textContent=`Sign in as ${profile.nickname||profile.name||'this profile'}`;openDialog($('#signInChoiceDialog'));
       }
     }catch(err){showToast(err.message||'Google sign-in failed');}
   });
@@ -276,14 +276,14 @@ function bindEvents(){
     e.preventDefault();
     const nickname=$('#profileNicknameInput').value.trim();
     if(!nickname)return;
-    $('#nicknameDialog').close();
+    closeDialog($('#nicknameDialog'));
     pendingNickname=nickname;pendingAuthProfile=null;
     $('#signInChoiceTitle').textContent=`Add ${nickname}`;
-    $('#signInChoiceDialog').showModal();
+    openDialog($('#signInChoiceDialog'));
   });
-  $$('.nickname-cancel').forEach(button=>button.addEventListener('click',()=>$('#nicknameDialog').close()));
+  $$('.nickname-cancel').forEach(button=>button.addEventListener('click',()=>closeDialog($('#nicknameDialog'))));
   $('#signInOnDeviceButton').addEventListener('click',async()=>{
-    $('#signInChoiceDialog').close();
+    closeDialog($('#signInChoiceDialog'));
     try{
       const result=await dataService.signIn(pendingAuthProfile?.email||'',pendingNickname,pendingAuthProfile?.uid||'');
       if(result?.redirecting){showToast('Opening Google sign-in…');return;}
@@ -294,7 +294,7 @@ function bindEvents(){
     }catch(err){if(err?.code!=='auth/popup-closed-by-user')showToast(err.message||'Google sign-in failed');}
   });
   $('#signInWithPhoneButton').addEventListener('click',async()=>{
-    $('#signInChoiceDialog').close();
+    closeDialog($('#signInChoiceDialog'));
     const dialog=$('#phoneSignInDialog');
     const canvas=$('#phoneSignInQr');
     const link=$('#phoneSignInLink');
@@ -368,15 +368,29 @@ function updateMonthlyForm(){
 
 
 async function init(){
-  await dataService.init();
   bindEvents();
+  const firebaseStarted=await dataService.init();
   if(!dataService.isFirebaseEnabled()){
-    state=await dataService.getAll();renderAll();showProfileGate('Firebase is not configured yet. Continue in demo mode or configure Google sign-in.');return;
+    renderAll();
+    showProfileGate(dataService.getStartupWarning()||'Firebase could not start on this device. Reload once, then check the Firebase configuration.');
+    return;
   }
-  await dataService.loadProfiles();renderProfileChooser();renderAll();
+  try{
+    await dataService.loadProfiles();
+  }catch(error){
+    console.error(error);
+    renderProfileChooser();renderAll();
+    showProfileGate(error?.code==='permission-denied'
+      ?'This device cannot read profiles yet. Publish the included Firestore rules, then reload.'
+      :(error?.message||'Profiles could not be loaded.'));
+    return;
+  }
+  renderProfileChooser();renderAll();
+  const startupWarning=dataService.getStartupWarning();
+  if(startupWarning)showToast(startupWarning);
   const approvalCode=new URLSearchParams(location.search).get('approve');
   if(approvalCode){
-    showProfileGate('Approve the sign-in request from your phone');$('#phoneApprovalDialog').showModal();
+    showProfileGate('Approve the sign-in request from your phone');openDialog($('#phoneApprovalDialog'));
     if(dataService.isGoogleSignedIn()){$('#approveWithGoogleButton').hidden=true;$('#finishPhoneApprovalButton').hidden=false;$('#phoneApprovalMessage').textContent='Google sign-in complete. Approve the waiting device.';}
     return;
   }

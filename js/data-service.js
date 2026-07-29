@@ -4,6 +4,7 @@ import { demoData } from './demo-data.js';
 let firebase=null;
 let householdId=FIREBASE_SETTINGS.householdId||'primary-home';
 let memberCache=[];
+let startupWarning='';
 const PENDING_ACTION_KEY='householdHubPendingAuthAction';
 const DEVICE_AUTH_KEY='householdHubAuthorizedProfiles';
 const DEVICE_MODE_KEY='householdHubDeviceMode';
@@ -53,7 +54,15 @@ function memberSortValue(member){
   if(member.lastSeenAt?.toMillis)return member.lastSeenAt.toMillis();
   return Number.MAX_SAFE_INTEGER;
 }
-async function refreshMembers(){await ensureAnonymousSession();memberCache=(await docsToArray('members')).sort((a,b)=>memberSortValue(a)-memberSortValue(b));return clone(memberCache);}
+async function refreshMembers(){
+  try{await ensureAnonymousSession();}
+  catch(error){
+    if(error?.code!=='auth/operation-not-allowed')console.warn('Anonymous session unavailable',error);
+    startupWarning='Anonymous Authentication is not enabled. Using limited signed-out access.';
+  }
+  memberCache=(await docsToArray('members')).sort((a,b)=>memberSortValue(a)-memberSortValue(b));
+  return clone(memberCache);
+}
 async function upsertCurrentMember(nickname=''){
   requireAuth();
   const user=firebase.auth.currentUser;
@@ -90,8 +99,19 @@ async function beginGoogle(action={}){
 function authorizeProfileOnDevice(uid){const map=authorizedMap();map[uid]=Date.now();saveAuthorizedMap(map);}
 
 export const dataService={
-  async init(){try{const ok=await initFirebase();if(ok){await ensureAnonymousSession();await refreshMembers();}return ok;}catch(error){console.error(error);return false;}},
+  async init(){
+    try{
+      const ok=await initFirebase();
+      if(ok)await refreshMembers();
+      return ok;
+    }catch(error){
+      console.error(error);
+      startupWarning=error?.message||'Firebase could not start.';
+      return false;
+    }
+  },
   isFirebaseEnabled(){return Boolean(firebase);},
+  getStartupWarning(){return startupWarning;},
   getCurrentUser(){return firebase?.auth.currentUser||null;},
   isGoogleSignedIn(){return isGoogleUser();},
   getKnownProfiles(){return clone(memberCache);},
@@ -113,9 +133,9 @@ export const dataService={
   async switchProfile(profile){return beginGoogle({loginHint:profile?.email||'',profileUid:profile?.uid||''});},
   async signOut(){if(firebase)await firebase.authMod.signOut(firebase.auth);await ensureAnonymousSession();},
   async createPhoneAuthRequest({profileUid='',nickname=''}){
-    await ensureAnonymousSession();const code=Math.random().toString(36).slice(2,6).toUpperCase()+Math.random().toString(36).slice(2,6).toUpperCase();
+    try{await ensureAnonymousSession();}catch(error){if(error?.code!=='auth/operation-not-allowed')throw error;}const code=Math.random().toString(36).slice(2,6).toUpperCase()+Math.random().toString(36).slice(2,6).toUpperCase();
     const ref=firebase.fsMod.doc(collectionRef('authRequests'),code);
-    await firebase.fsMod.setDoc(ref,{code,profileUid,nickname,status:'pending',createdAt:firebase.fsMod.serverTimestamp(),expiresAt:Date.now()+10*60*1000,requestingUid:firebase.auth.currentUser.uid});
+    await firebase.fsMod.setDoc(ref,{code,profileUid,nickname,status:'pending',createdAt:firebase.fsMod.serverTimestamp(),expiresAt:Date.now()+10*60*1000,requestingUid:firebase.auth.currentUser?.uid||('guest-'+Math.random().toString(36).slice(2))});
     const approvalUrl=new URL(location.href);approvalUrl.search='';approvalUrl.hash='';approvalUrl.searchParams.set('approve',code);return {code,url:approvalUrl.toString()};
   },
   watchPhoneAuthRequest(code,callback,onError){const ref=firebase.fsMod.doc(collectionRef('authRequests'),code);return firebase.fsMod.onSnapshot(ref,s=>callback(s.exists()?s.data():null),onError);},
