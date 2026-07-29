@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20260726-echo-auth-2" />
+  <link rel="stylesheet" href="css/styles.css?v=20260729-profile-calendar" />
 </head>
 <body>
   <div id="loadingOverlay" class="loading-overlay" hidden aria-live="polite" aria-busy="true">
@@ -150,6 +150,7 @@
             <p class="muted">Add your Firebase configuration in <code>js/firebase-config.js</code>. Google authentication and Firestore will activate automatically.</p>
             <div id="authStatus" class="status-box">Demo mode is active.</div>
             <button class="primary-button wide" id="signInButton">Sign in with Google</button>
+            <button class="secondary-button wide" id="editProfileButton" hidden>Edit my profile</button>
             <button class="secondary-button wide" id="signOutButton" hidden>Sign out</button>
           </article>
           <article class="card settings-card">
@@ -240,6 +241,17 @@
     </form>
   </dialog>
 
+  <dialog id="editProfileDialog" class="modal profile-edit-modal">
+    <form id="editProfileForm">
+      <div class="modal-header"><div><p class="section-kicker">My profile</p><h3>Edit profile</h3></div><button type="button" class="icon-button dialog-close" aria-label="Close">×</button></div>
+      <div class="profile-edit-preview"><img id="editProfilePhoto" alt="Google profile" hidden><span id="editProfileFallback">HH</span><div><strong id="editProfileGoogleName"></strong><small id="editProfileEmail"></small></div></div>
+      <p class="muted">Your Google photo, Google name, and email stay connected to Google. You can change how your profile appears inside Household Hub.</p>
+      <label>Nickname<input id="editProfileNickname" name="nickname" required maxlength="24" autocomplete="off"></label>
+      <label>Profile color<input id="editProfileColor" name="profileColor" type="color" value="#4f6f66"></label>
+      <div class="modal-actions"><button type="button" class="secondary-button dialog-close">Cancel</button><button type="submit" class="primary-button">Save profile</button></div>
+    </form>
+  </dialog>
+
   <div id="toast" class="toast" role="status"></div>
 
 
@@ -275,7 +287,7 @@
     </form>
   </dialog>
 
-  <script src="js/household-qr.js?v=20260726-echo-auth-2"></script>
-  <script type="module" src="js/app.js?v=20260726-echo-auth-2"></script>
+  <script src="js/household-qr.js?v=20260729-profile-calendar"></script>
+  <script type="module" src="js/app.js?v=20260729-profile-calendar"></script>
 </body>
 </html>
